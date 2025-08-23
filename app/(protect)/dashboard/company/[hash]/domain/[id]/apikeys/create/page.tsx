@@ -18,9 +18,11 @@ const AVAILABLE_SCOPES = [
     { value: "users:manage", label: "Manage Users" },
 ];
 
-export default function CreateApiKeyPage() {
+export default function CreateDomainApiKeyPage() {
     const router = useRouter();
-    const { hash } = useParams<{ hash: string }>();
+    const { hash, id } = useParams<{ hash: string; id: string }>(); // company hash + domain id
+    const domainId = Number(id);
+
     const [label, setLabel] = useState("");
     const [selectedScopes, setSelectedScopes] = useState<string[]>([]);
     const [selectAll, setSelectAll] = useState(false);
@@ -33,9 +35,7 @@ export default function CreateApiKeyPage() {
 
     const toggleScope = (scope: string) => {
         setSelectedScopes((prev) =>
-            prev.includes(scope)
-                ? prev.filter((s) => s !== scope)
-                : [...prev, scope]
+            prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope]
         );
     };
 
@@ -50,12 +50,21 @@ export default function CreateApiKeyPage() {
 
     async function handleSubmit(e: FormEvent) {
         e.preventDefault();
+
         if (!label.trim()) {
-            setApiError({ error: true, message: "Label is required", fields: { label: "Required" } });
+            setApiError({
+                error: true,
+                message: "Label is required",
+                fields: { label: "Required" },
+            });
             return;
         }
         if (selectedScopes.length === 0) {
-            setApiError({ error: true, message: "At least one scope must be selected", fields: { scopes: "Select one or more" } });
+            setApiError({
+                error: true,
+                message: "At least one scope must be selected",
+                fields: { scopes: "Select one or more" },
+            });
             return;
         }
 
@@ -70,7 +79,7 @@ export default function CreateApiKeyPage() {
         try {
             const token = getToken();
             const res = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/companies/${hash}/apikeys`,
+                `${process.env.NEXT_PUBLIC_BACKEND_URL}/companies/${hash}/domains/${domainId}/apikeys`,
                 {
                     method: "POST",
                     headers: {
@@ -82,8 +91,17 @@ export default function CreateApiKeyPage() {
             );
 
             if (!res.ok) {
-                const errJson: ApiError = await res.json();
-                setApiError(errJson);
+                // Try to parse structured error, fall back to generic text
+                let errJson: ApiError | null = null;
+                try {
+                    errJson = (await res.json()) as ApiError;
+                } catch {}
+                setApiError(
+                    errJson ?? {
+                        error: true,
+                        message: `Failed to create key (${res.status})`,
+                    }
+                );
                 setSaving(false);
                 return;
             }
@@ -122,7 +140,9 @@ export default function CreateApiKeyPage() {
                     </button>
                 </div>
                 <button
-                    onClick={() => router.push(`/dashboard/company/${hash}/apikeys`)}
+                    onClick={() =>
+                        router.push(`/dashboard/company/${hash}/domain/${domainId}?tab=keys`)
+                    }
                     className="px-4 py-2 bg-blue-800 text-white rounded hover:bg-blue-900"
                 >
                     Done
@@ -140,7 +160,9 @@ export default function CreateApiKeyPage() {
                 <ArrowLeftIcon className="h-5 w-5 mr-1" />
                 Back
             </button>
-            <h1 className="text-2xl font-semibold mb-6">Create API Key</h1>
+            <h1 className="text-2xl font-semibold mb-6">
+                Create Domain API Key <span className="text-gray-500 text-base">(# {domainId})</span>
+            </h1>
 
             {apiError && (
                 <div role="alert" className="mb-4 rounded bg-red-50 p-3 text-red-700">
@@ -163,9 +185,7 @@ export default function CreateApiKeyPage() {
                         required
                     />
                     {apiError?.fields?.label && (
-                        <p className="mt-1 text-sm text-red-600">
-                            {apiError.fields.label}
-                        </p>
+                        <p className="mt-1 text-sm text-red-600">{apiError.fields.label}</p>
                     )}
                 </div>
 
@@ -183,10 +203,7 @@ export default function CreateApiKeyPage() {
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                         {AVAILABLE_SCOPES.map((scope) => (
-                            <label
-                                key={scope.value}
-                                className="inline-flex items-center space-x-2"
-                            >
+                            <label key={scope.value} className="inline-flex items-center space-x-2">
                                 <input
                                     type="checkbox"
                                     checked={selectedScopes.includes(scope.value)}
@@ -198,9 +215,7 @@ export default function CreateApiKeyPage() {
                         ))}
                     </div>
                     {apiError?.fields?.scopes && (
-                        <p className="mt-1 text-sm text-red-600">
-                            {apiError.fields.scopes}
-                        </p>
+                        <p className="mt-1 text-sm text-red-600">{apiError.fields.scopes}</p>
                     )}
                 </div>
 

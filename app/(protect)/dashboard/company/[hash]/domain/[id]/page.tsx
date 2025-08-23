@@ -2,7 +2,7 @@
 
 import React, { Fragment } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, usePathname, useSearchParams } from 'next/navigation';
 import { normalizeMx } from '@/utils/dns';
 import {
     ArrowLeftIcon,
@@ -13,15 +13,17 @@ import { Menu, Transition } from '@headlessui/react';
 
 import { StatusBadge } from '@/components/domain/Status';
 import ConfirmDeleteDomainModal from '@/components/domain/DeleteDomainModal';
-import {
-    OverviewSection,
-    RelatedSection,
-} from '@/components/domain/Sections';
-import SetupDnsSection from '@/components/domain/SetupDnsSection';
 import type { DomainDetail } from '@/types/domain';
+
+import Tabs from '@/components/ui/Tabs';
+import GeneralInfoTab from '@/components/domain/tabs/GeneralInfoTab';
+import RecordsTab from '@/components/domain/tabs/RecordsTab';
+import KeysTab from '@/components/domain/tabs/KeysTab';
 
 export default function DomainDetailPage() {
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const { hash, id } = useParams<{ hash: string; id: string }>();
 
     const [detail, setDetail] = React.useState<DomainDetail | null>(null);
@@ -33,6 +35,17 @@ export default function DomainDetailPage() {
     const [deleteError, setDeleteError] = React.useState<string | null>(null);
 
     const [refreshing, setRefreshing] = React.useState(false);
+
+    // ---- URL-synced tab state
+    type TabId = 'general' | 'records' | 'keys';
+    const paramTab = (searchParams.get('tab') as TabId | null) ?? 'general';
+    const [activeTab, setActiveTab] = React.useState<TabId>(paramTab);
+
+    // Keep state in sync if user navigates with back/forward or external link
+    React.useEffect(() => {
+        setActiveTab(paramTab);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [paramTab]);
 
     const authHeaders = (): HeadersInit => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('jwt') : null;
@@ -106,6 +119,22 @@ export default function DomainDetailPage() {
         }
     }
 
+    // Build href for each tab (preserving other query params)
+    const tabHref = (id: string) => {
+        const tabId = id as TabId; // narrow
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('tab', tabId);
+        return `${pathname}?${params.toString()}`;
+    };
+
+    // Also update state+URL when clicking tabs (keyboard users, etc.)
+    function onTabChange(id: string) {
+        const params = new URLSearchParams(searchParams.toString());
+        params.set('tab', id);
+        router.replace(`${pathname}?${params.toString()}`);
+        setActiveTab(id as TabId);
+    }
+
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center">
@@ -131,7 +160,7 @@ export default function DomainDetailPage() {
         );
     }
 
-    const { company, status, domain, created_at, verified_at } = detail;
+    const { company, status, domain, created_at } = detail;
 
     return (
         <div className="p-6 space-y-8">
@@ -150,6 +179,10 @@ export default function DomainDetailPage() {
                 </div>
 
                 <div className="ml-auto flex items-center gap-3">
+          <span className="text-sm text-gray-500 hidden sm:inline">
+            Created: {created_at ? new Date(created_at).toLocaleString() : '—'}
+          </span>
+
                     <Link
                         href={`/dashboard/company/${company.hash}`}
                         className="text-sm text-blue-600 hover:text-blue-700"
@@ -170,8 +203,8 @@ export default function DomainDetailPage() {
                             enterFrom="transform opacity-0 scale-95"
                             enterTo="transform opacity-100 scale-100"
                             leave="transition ease-in duration-75"
-                            leaveFrom="transform opacity-100 scale-100"
-                            leaveTo="transform opacity-0 scale-95"
+                            leaveFrom="opacity-100 scale-100"
+                            leaveTo="opacity-0 scale-95"
                         >
                             <Menu.Items className="absolute right-0 mt-2 w-44 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
                                 <div className="py-1">
@@ -196,32 +229,37 @@ export default function DomainDetailPage() {
                 </div>
             </div>
 
-            {/* Overview */}
-            <OverviewSection
-                created_at={created_at}
-                verified_at={verified_at}
-                companyName={company.name}
-                require_tls={detail.require_tls}
-                arc_sign={detail.arc_sign}
-                bimi_enabled={detail.bimi_enabled}
+            {/* Tabs */}
+            <Tabs
+                tabs={[
+                    { id: 'general', label: 'General' },
+                    { id: 'records', label: 'Records' },
+                    { id: 'keys', label: 'Keys' },
+                ]}
+                activeId={activeTab}
+                onChange={onTabChange}
+                linkForId={tabHref}
             />
 
-            {/* DNS + Verification */}
-            <SetupDnsSection
-                detail={detail}
-                onRefresh={refreshDomain}
-                loadingRefresh={refreshing}
-            />
-
-            {/* Related */}
-            <RelatedSection
-                counts={{
-                    dkimKeys: detail.counts.dkimKeys,
-                    messages: detail.counts.messages,
-                    dmarcAggregates: detail.counts.dmarcAggregates,
-                }}
-                companyHash={company.hash}
-            />
+            {/* Panels */}
+            <div className="pt-4">
+                {activeTab === 'general' && <GeneralInfoTab detail={detail} />}
+                {activeTab === 'records' && (
+                    <RecordsTab
+                        detail={detail}
+                        onRefresh={refreshDomain}
+                        loadingRefresh={refreshing}
+                    />
+                )}
+                {activeTab === 'keys' && (
+                    <KeysTab
+                        backendUrl={process.env.NEXT_PUBLIC_BACKEND_URL as string}
+                        companyHash={company.hash}
+                        domainId={detail.id}
+                        authHeaders={authHeaders}
+                    />
+                )}
+            </div>
 
             {/* Modal */}
             <ConfirmDeleteDomainModal
