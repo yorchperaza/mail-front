@@ -92,28 +92,28 @@ export default function CompanySidebar() {
             icon: EnvelopeOpenIcon,
             children: [
                 { title: 'SMTP credentials', href: `${base}/messaging/smtp` },
-                { title: 'IP pools', href: `${base}/messaging/ip-pools` },
+                { title: 'IP pools', href: `${base}/ip-pools` },
                 { title: 'Messages', href: `${base}/messaging/messages` },
-                { title: 'Inbound routes', href: `${base}/messaging/inbound/routes` },
-                { title: 'Inbound messages', href: `${base}/messaging/inbound/messages` },
+                { title: 'Inbound routes', href: `${base}/inbound/routes` },
+                { title: 'Inbound messages', href: `${base}/inbound/messages` },
             ],
         },
         {
             title: 'Contacts',
             icon: UsersIcon,
             children: [
+                { title: 'Contacts', href: `${base}/contacts` },
                 { title: 'Lists', href: `${base}/lists` },
                 { title: 'Segments', href: `${base}/segments` },
-                { title: 'Contacts', href: `${base}/contacts` },
             ],
         },
         {
             title: 'Automation',
             icon: RectangleStackIcon,
             children: [
-                { title: 'Campaigns', href: `${base}/campaigns` },
-                { title: 'Automations', href: `${base}/automations` },
                 { title: 'Templates', href: `${base}/templates` },
+                { title: 'Automations', href: `${base}/automations` },
+                { title: 'Campaigns', href: `${base}/campaigns` },
             ],
         },
         {
@@ -131,7 +131,6 @@ export default function CompanySidebar() {
             icon: LinkIcon,
             children: [
                 { title: 'Webhooks', href: `${base}/webhooks` },
-                { title: 'Inbound', href: `${base}/inbound` },
             ],
         },
         {

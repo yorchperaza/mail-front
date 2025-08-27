@@ -5,20 +5,23 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
     ArrowLeftIcon,
+    MagnifyingGlassIcon,
     PlusIcon,
     PencilSquareIcon,
     TrashIcon,
-    MagnifyingGlassIcon,
-    XMarkIcon,
     EyeIcon,
+    XMarkIcon,
 } from '@heroicons/react/24/outline';
 
-type ListGroup = {
+type TemplateItem = {
     id: number;
-    name: string;
-    created_at?: string | null;
-    counts?: {
-        contacts?: number | null;
+    name: string | null;
+    engine: string | null;     // 'raw' | 'handlebars' | 'mjml' | null
+    version: number | null;
+    html: string | null;       // not displayed here; just in shape
+    text: string | null;       // not displayed here; just in shape
+    created_at: string | null; // ISO
+    usage?: {
         campaigns?: number | null;
     };
 };
@@ -28,7 +31,38 @@ type ApiListResponse<T> = {
     items: T[];
 };
 
-export default function ListsIndexPage() {
+/* ---------------- helpers ---------------- */
+
+function cx(...xs: Array<string | false | null | undefined>) {
+    return xs.filter(Boolean).join(' ');
+}
+
+function EngineBadge({ engine }: { engine: string | null }) {
+    if (!engine) return <span className="text-gray-400">—</span>;
+    const tone =
+        engine === 'raw'
+            ? 'bg-gray-100 text-gray-800 border-gray-200'
+            : engine === 'handlebars'
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : engine === 'mjml'
+                    ? 'bg-indigo-50 text-indigo-800 border-indigo-200'
+                    : 'bg-gray-50 text-gray-700 border-gray-200';
+
+    return (
+        <span className={cx('inline-flex items-center rounded-full border px-2 py-0.5 text-xs', tone)}>
+      {engine}
+    </span>
+    );
+}
+
+function toLocale(s?: string | null) {
+    if (!s) return '—';
+    try { return new Date(s).toLocaleString(); } catch { return s; }
+}
+
+/* ---------------- page ---------------- */
+
+export default function TemplatesListPage() {
     const router = useRouter();
     const search = useSearchParams();
     const { hash } = useParams<{ hash: string }>();
@@ -42,17 +76,10 @@ export default function ListsIndexPage() {
     const [searchTerm, setSearchTerm] = useState(qFromUrl);
     useEffect(() => setSearchTerm(qFromUrl), [qFromUrl]);
 
-    // UI/data
-    const [data, setData] = useState<ApiListResponse<ListGroup> | null>(null);
+    // data/ui
+    const [data, setData] = useState<ApiListResponse<TemplateItem> | null>(null);
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
-
-    const [newListName, setNewListName] = useState('');
-
-    const [renamingId, setRenamingId] = useState<number | null>(null);
-    const [renameValue, setRenameValue] = useState('');
-    const [renaming, setRenaming] = useState(false);
-
     const [deletingId, setDeletingId] = useState<number | null>(null);
 
     const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -61,16 +88,16 @@ export default function ListsIndexPage() {
         return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
     };
 
+    // list URL
     const listUrl = useMemo(() => {
         const sp = new URLSearchParams();
         sp.set('page', String(page));
         sp.set('perPage', String(perPage));
-        sp.set('withCounts', '1');
         if (qFromUrl) sp.set('search', qFromUrl);
-        return `${backend}/companies/${hash}/lists?${sp.toString()}`;
+        return `${backend}/companies/${hash}/templates?${sp.toString()}`;
     }, [backend, hash, page, perPage, qFromUrl]);
 
-    // Fetch lists
+    // fetch
     useEffect(() => {
         let abort = false;
         (async () => {
@@ -78,8 +105,8 @@ export default function ListsIndexPage() {
             setErr(null);
             try {
                 const res = await fetch(listUrl, { headers: authHeaders() });
-                if (!res.ok) throw new Error(`Failed to load lists (${res.status})`);
-                const json: ApiListResponse<ListGroup> = await res.json();
+                if (!res.ok) throw new Error(`Failed to load templates (${res.status})`);
+                const json: ApiListResponse<TemplateItem> = await res.json();
                 if (!abort) setData(json);
             } catch (e) {
                 if (!abort) setErr(e instanceof Error ? e.message : String(e));
@@ -90,6 +117,7 @@ export default function ListsIndexPage() {
         return () => { abort = true; };
     }, [listUrl]);
 
+    // url updater
     function updateQuery(partial: Record<string, unknown>) {
         const sp = new URLSearchParams(search.toString());
         Object.entries(partial).forEach(([k, v]) => {
@@ -108,56 +136,23 @@ export default function ListsIndexPage() {
         updateQuery({ search: undefined, page: 1 });
     }
 
-    const toLocale = (s?: string | null) => {
-        if (!s) return '—';
-        try { return new Date(s).toLocaleString(); } catch { return s; }
-    };
-
-    function openRename(g: ListGroup) {
-        setRenamingId(g.id);
-        setRenameValue(g.name);
-    }
-    async function handleRename() {
-        const id = renamingId;
-        if (!id || !renameValue.trim()) return;
-        setRenaming(true);
-        try {
-            const res = await fetch(`${backend}/companies/${hash}/lists/${id}`, {
-                method: 'PATCH',
-                headers: authHeaders(),
-                body: JSON.stringify({ name: renameValue.trim() }),
-            });
-            if (!res.ok) throw new Error(`Rename failed (${res.status})`);
-            const updated: ListGroup = await res.json();
-            setData(prev => prev
-                ? { ...prev, items: prev.items.map(i => (i.id === id ? updated : i)) }
-                : prev
-            );
-            setRenamingId(null);
-            setRenameValue('');
-        } catch (e) {
-            alert(e instanceof Error ? e.message : String(e));
-        } finally {
-            setRenaming(false);
-        }
-    }
-
     async function handleDelete(id: number) {
-        if (!confirm('Delete this list? All its memberships will be removed.')) return;
+        if (!confirm('Delete this template?')) return;
         setDeletingId(id);
         try {
-            const res = await fetch(`${backend}/companies/${hash}/lists/${id}`, {
+            const res = await fetch(`${backend}/companies/${hash}/templates/${id}`, {
                 method: 'DELETE',
                 headers: authHeaders(),
             });
             if (!res.ok && res.status !== 204) throw new Error(`Delete failed (${res.status})`);
-            setData(prev => prev
-                ? {
-                    ...prev,
-                    items: prev.items.filter(i => i.id !== id),
-                    meta: { ...prev.meta, total: Math.max(0, prev.meta.total - 1) },
-                }
-                : prev
+            setData(prev =>
+                prev
+                    ? {
+                        ...prev,
+                        items: prev.items.filter(i => i.id !== id),
+                        meta: { ...prev.meta, total: Math.max(0, prev.meta.total - 1) },
+                    }
+                    : prev
             );
         } catch (e) {
             alert(e instanceof Error ? e.message : String(e));
@@ -167,8 +162,9 @@ export default function ListsIndexPage() {
     }
 
     const backHref = `/dashboard/company/${hash}`;
+    const createHref = `/dashboard/company/${hash}/templates/create`;
 
-    if (loading && !data) return <p className="p-6 text-center text-gray-600">Loading lists…</p>;
+    if (loading && !data) return <p className="p-6 text-center text-gray-600">Loading templates…</p>;
     if (err) return (
         <div className="p-6 text-center">
             <p className="text-red-600">{err}</p>
@@ -191,13 +187,13 @@ export default function ListsIndexPage() {
                 >
                     <ArrowLeftIcon className="h-5 w-5 mr-1" /> Back
                 </button>
-                <h1 className="text-2xl font-semibold">Lists</h1>
-                <button
-                    onClick={() => router.push(`/dashboard/company/${hash}/lists/create`)}
+                <h1 className="text-2xl font-semibold">Templates</h1>
+                <Link
+                    href={createHref}
                     className="inline-flex items-center px-4 py-2 bg-blue-800 text-white rounded hover:bg-blue-900"
                 >
-                    <PlusIcon className="h-5 w-5 mr-1" /> New List
-                </button>
+                    <PlusIcon className="h-5 w-5 mr-1" /> New Template
+                </Link>
             </div>
 
             {/* Toolbar */}
@@ -208,7 +204,7 @@ export default function ListsIndexPage() {
                         name="search"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        placeholder="Search by list name…"
+                        placeholder="Search by name or engine…"
                         className="w-full pl-9 pr-9 py-2 rounded border border-gray-300"
                     />
                     {searchTerm && (
@@ -251,55 +247,60 @@ export default function ListsIndexPage() {
                     <thead className="bg-gray-50 text-gray-700">
                     <tr className="text-left">
                         <th className="px-3 py-2">Name</th>
-                        <th className="px-3 py-2"># Contacts</th>
-                        <th className="px-3 py-2">Created</th>
-                        <th className="px-3 py-2"></th>
+                        <th className="px-3 py-2 w-36">Engine</th>
+                        <th className="px-3 py-2 w-24">Version</th>
+                        <th className="px-3 py-2 w-40">Created</th>
+                        <th className="px-3 py-2 w-40">Used in</th>
+                        <th className="px-3 py-2 w-[280px]"></th>
                     </tr>
                     </thead>
                     <tbody>
                     {items.length === 0 ? (
                         <tr>
-                            <td className="px-3 py-6 text-center text-gray-500" colSpan={4}>
-                                No lists found.
+                            <td className="px-3 py-6 text-center text-gray-500" colSpan={6}>
+                                No templates found.
                             </td>
                         </tr>
-                    ) : (
-                        items.map((g) => (
-                            <tr key={g.id} className="border-t">
-                                <td className="px-3 py-2">{g.name}</td>
-                                <td className="px-3 py-2">{g.counts?.contacts ?? '—'}</td>
-                                <td className="px-3 py-2">{toLocale(g.created_at)}</td>
-                                <td className="px-3 py-2">
-                                    <div className="flex items-center gap-2">
-                                        <Link
-                                            href={`/dashboard/company/${hash}/lists/${g.id}/contacts`}
-                                            className="inline-flex items-center gap-1 px-2 py-1 rounded border hover:bg-gray-50"
-                                            title="View contacts in this list"
-                                        >
-                                            <EyeIcon className="h-4 w-4" /> View Members
-                                        </Link>
-                                        <button
-                                            onClick={() => openRename(g)}
-                                            className="inline-flex items-center gap-1 px-2 py-1 rounded border hover:bg-gray-50"
-                                            title="Rename list"
-                                        >
-                                            <PencilSquareIcon className="h-4 w-4" /> Rename
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(g.id)}
-                                            disabled={deletingId === g.id}
-                                            className={`inline-flex items-center gap-1 px-2 py-1 rounded border ${
-                                                deletingId === g.id ? 'text-red-400' : 'text-red-600 hover:bg-red-50'
-                                            }`}
-                                            title="Delete list"
-                                        >
-                                            <TrashIcon className="h-4 w-4" /> Delete
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        ))
-                    )}
+                    ) : items.map(t => (
+                        <tr key={t.id} className="border-t align-top">
+                            <td className="px-3 py-2">{t.name || <span className="text-gray-400">(untitled)</span>}</td>
+                            <td className="px-3 py-2"><EngineBadge engine={t.engine} /></td>
+                            <td className="px-3 py-2">{t.version ?? '—'}</td>
+                            <td className="px-3 py-2">{toLocale(t.created_at)}</td>
+                            <td className="px-3 py-2">
+                                {typeof t.usage?.campaigns === 'number' ? `${t.usage.campaigns} campaign${t.usage.campaigns === 1 ? '' : 's'}` : '—'}
+                            </td>
+                            <td className="px-3 py-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                    <Link
+                                        href={`/dashboard/company/${hash}/templates/${t.id}`}
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded border hover:bg-gray-50"
+                                        title="View"
+                                    >
+                                        <EyeIcon className="h-4 w-4" /> View
+                                    </Link>
+                                    <Link
+                                        href={`/dashboard/company/${hash}/templates/${t.id}/edit`}
+                                        className="inline-flex items-center gap-1 px-2 py-1 rounded border hover:bg-gray-50"
+                                        title="Edit"
+                                    >
+                                        <PencilSquareIcon className="h-4 w-4" /> Edit
+                                    </Link>
+                                    <button
+                                        onClick={() => handleDelete(t.id)}
+                                        disabled={deletingId === t.id}
+                                        className={cx(
+                                            'inline-flex items-center gap-1 px-2 py-1 rounded border',
+                                            deletingId === t.id ? 'text-red-400' : 'text-red-600 hover:bg-red-50'
+                                        )}
+                                        title="Delete"
+                                    >
+                                        <TrashIcon className="h-4 w-4" /> Delete
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                    ))}
                     </tbody>
                 </table>
             </div>
@@ -309,7 +310,7 @@ export default function ListsIndexPage() {
                 <div className="text-sm text-gray-600">
                     Page <span className="font-medium">{meta.page}</span> of{' '}
                     <span className="font-medium">{meta.totalPages}</span>
-                    {' '}· {meta.total} lists
+                    {' '}· {meta.total} total
                 </div>
                 <div className="flex items-center gap-2">
                     <button
@@ -328,44 +329,6 @@ export default function ListsIndexPage() {
                     </button>
                 </div>
             </div>
-
-            {/* Rename Modal */}
-            {renamingId !== null && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center">
-                    <div className="absolute inset-0 bg-black/30" onClick={() => setRenamingId(null)} />
-                    <div className="relative bg-white w-full max-w-md rounded-lg shadow-lg p-5 space-y-4 border">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold">Rename List</h2>
-                            <button onClick={() => setRenamingId(null)} className="p-1 rounded hover:bg-gray-100" aria-label="Close">
-                                <XMarkIcon className="h-5 w-5" />
-                            </button>
-                        </div>
-
-                        <div>
-                            <label className="block text-sm font-medium mb-1">New name</label>
-                            <input
-                                value={renameValue}
-                                onChange={(e) => setRenameValue(e.target.value)}
-                                className="w-full rounded border px-3 py-2"
-                                placeholder="New list name"
-                            />
-                        </div>
-
-                        <div className="flex items-center justify-end gap-2">
-                            <button onClick={() => setRenamingId(null)} className="px-4 py-2 rounded border hover:bg-gray-50">
-                                Cancel
-                            </button>
-                            <button
-                                onClick={handleRename}
-                                disabled={renaming || !renameValue.trim()}
-                                className="px-4 py-2 rounded bg-blue-800 text-white hover:bg-blue-900 disabled:opacity-60"
-                            >
-                                {renaming ? 'Saving…' : 'Save'}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

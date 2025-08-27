@@ -5,6 +5,18 @@ import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigat
 import Link from 'next/link';
 import { ArrowLeftIcon } from '@heroicons/react/24/outline';
 
+/* Recharts */
+import {
+    ResponsiveContainer,
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Brush,
+} from 'recharts';
+
 /* ========================= Types ========================= */
 
 type MessageItem = {
@@ -83,11 +95,21 @@ function buildQuery(params: Record<string, unknown>) {
 }
 
 function fmtDate(d: Date) {
-    // yyyy-mm-dd for <input type="date">
     const y = d.getFullYear();
     const m = String(d.getMonth() + 1).padStart(2, '0');
     const day = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${day}`;
+}
+
+/** Build a YYYY-MM-DD key for chart bucketing */
+function dayKey(iso?: string | null): string {
+    if (!iso) return 'unknown';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return 'unknown';
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${dd}`;
 }
 
 /* ========================= Page ========================= */
@@ -120,7 +142,6 @@ export default function CompanyMessagesPage() {
     const order = (search.get('order') || 'desc') as 'asc' | 'desc';
 
     const domain_id = search.get('domain_id') || '';
-    // DATE-ONLY inputs (no time). Hours are separate.
     const date_from = search.get('date_from') || '';
     const date_to = search.get('date_to') || '';
     const hour_from = search.get('hour_from') || '';
@@ -236,7 +257,14 @@ export default function CompanyMessagesPage() {
 
     function clearFilters() {
         setShowAdvanced(false);
-        updateQuery({ page: 1, perPage, sort, order, domain_id: '', date_from: '', date_to: '', hour_from: '', hour_to: '', state: '', from: '', to: '', subject: '', message_id: '', has_opens: '', has_clicks: '' }, false);
+        updateQuery(
+            {
+                page: 1, perPage, sort, order,
+                domain_id: '', date_from: '', date_to: '', hour_from: '', hour_to: '',
+                state: '', from: '', to: '', subject: '', message_id: '', has_opens: '', has_clicks: ''
+            },
+            false
+        );
     }
 
     function fmtDateUTC(d: Date) {
@@ -248,17 +276,30 @@ export default function CompanyMessagesPage() {
 
     const formKey = search.toString();
 
-
     function applyQuickRange(days: number) {
-        // build UTC “from/to” covering whole days
         const now = new Date();
-        const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));           // today (UTC)
-        const from = new Date(to); from.setUTCDate(to.getUTCDate() - (days - 1));                           // N days back
-        updateQuery(
-            { date_from: fmtDateUTC(from), date_to: fmtDateUTC(to) },
-            true // reset page
-        );
+        const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const from = new Date(to); from.setUTCDate(to.getUTCDate() - (days - 1));
+        updateQuery({ date_from: fmtDateUTC(from), date_to: fmtDateUTC(to) }, true);
     }
+
+    // ---- Chart data (per selected sort field) ----
+    const chartPoints = useMemo(() => {
+        const items = data?.items ?? [];
+        const pickDate = (m: MessageItem) => {
+            if (sort === 'sent_at') return m.sentAt || m.queuedAt || m.createdAt;
+            if (sort === 'queued_at') return m.queuedAt || m.createdAt || m.sentAt;
+            return m.createdAt || m.queuedAt || m.sentAt; // 'created_at'
+        };
+        const map = new Map<string, number>();
+        items.forEach((m) => {
+            const k = dayKey(pickDate(m));
+            if (k !== 'unknown') map.set(k, (map.get(k) || 0) + 1);
+        });
+        return Array.from(map.entries())
+            .sort((a, b) => (a[0] < b[0] ? -1 : 1))
+            .map(([date, count]) => ({ date, count }));
+    }, [data, sort]);
 
     // ---- Render ----
     if (loading) return <p className="p-6 text-center text-gray-600">Loading messages…</p>;
@@ -284,6 +325,64 @@ export default function CompanyMessagesPage() {
                 <Link href={`/dashboard/company/${hash}`} className="text-blue-700 hover:underline">
                     Company Overview →
                 </Link>
+            </div>
+
+            {/* Chart card (Recharts) */}
+            <div className="bg-white border rounded-lg p-4">
+                <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium">
+                        Volume over time <span className="text-gray-400">({sort.replace('_', ' ')})</span>
+                    </p>
+                    <p className="text-xs text-gray-500">
+                        Showing {items.length} of {meta.total} messages (current page with filters)
+                    </p>
+                </div>
+
+                <div className="h-56 w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={chartPoints} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis
+                                dataKey="date"
+                                tick={{ fontSize: 11, fill: '#6b7280' }}
+                                tickMargin={8}
+                                minTickGap={24}
+                            />
+                            <YAxis
+                                allowDecimals={false}
+                                tick={{ fontSize: 11, fill: '#6b7280' }}
+                                width={32}
+                            />
+                            <Tooltip
+                                formatter={(value) => [String(value), 'Messages']}
+                                labelFormatter={(label) => `Date: ${label}`}
+                                contentStyle={{ fontSize: 12 }}
+                            />
+                            <Line
+                                type="monotone"
+                                dataKey="count"
+                                stroke="#2563eb"
+                                strokeWidth={2}
+                                dot={{ r: 3 }}
+                                activeDot={{ r: 5 }}
+                            />
+                            <Brush dataKey="date" height={20} stroke="#9ca3af" travellerWidth={8} />
+                        </LineChart>
+                    </ResponsiveContainer>
+                </div>
+
+                <div className="mt-2 flex gap-3 flex-wrap text-xs text-gray-500">
+                    {chartPoints.length === 0 ? (
+                        <span>No data</span>
+                    ) : (
+                        chartPoints.map((p) => (
+                            <span key={p.date} className="inline-flex items-center gap-1">
+                <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#2563eb' }} />
+                                {p.date}: {p.count}
+              </span>
+                        ))
+                    )}
+                </div>
             </div>
 
             {/* Filters */}
@@ -446,7 +545,7 @@ export default function CompanyMessagesPage() {
                     )}
                 </div>
 
-                {/* Actions (sticky on large screens) */}
+                {/* Actions */}
                 <div className="flex items-center justify-between gap-3 sticky bottom-0 bg-white py-2">
                     <div className="flex items-center gap-2">
                         <label className="text-sm text-gray-600">Per page</label>
