@@ -12,6 +12,7 @@ import {
     MagnifyingGlassIcon,
     XMarkIcon,        // NEW
 } from '@heroicons/react/24/outline';
+import {ArrowDownTrayIcon} from "@heroicons/react/16/solid";
 
 type ContactItem = {
     id: number;
@@ -123,6 +124,7 @@ export default function ContactsListPage() {
 
     const backHref = `/dashboard/company/${hash}`;
     const createHref = `/dashboard/company/${hash}/contacts/create`;
+    const importHref = `/dashboard/company/${hash}/contacts/import`;
 
     const toLocale = (s?: string | null) => {
         if (!s) return '—';
@@ -153,12 +155,22 @@ export default function ContactsListPage() {
                     <ArrowLeftIcon className="h-5 w-5 mr-1" /> Back
                 </button>
                 <h1 className="text-2xl font-semibold">Contacts</h1>
-                <Link
-                    href={createHref}
-                    className="inline-flex items-center px-4 py-2 bg-blue-800 text-white rounded hover:bg-blue-900"
-                >
-                    <PlusIcon className="h-5 w-5 mr-1" /> New Contact
-                </Link>
+                <div className="flex items-center gap-3">
+
+                    <Link
+                        href={importHref}
+                        className="inline-flex items-center px-4 py-2 bg-blue-800 text-white rounded hover:bg-blue-900"
+                    >
+                        {/* Replace with a new icon for Import Contacts */}
+                        <ArrowDownTrayIcon className="h-5 w-5 mr-1" /> Import Contacts
+                    </Link>
+                    <Link
+                        href={createHref}
+                        className="inline-flex items-center px-4 py-2 bg-blue-800 text-white rounded hover:bg-blue-900"
+                    >
+                        <PlusIcon className="h-5 w-5 mr-1" /> New Contact
+                    </Link>
+                </div>
             </div>
 
             {/* Toolbar */}

@@ -9,6 +9,7 @@ import {
     PaperAirplaneIcon,
     CalendarDaysIcon,
     EyeIcon,
+    DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline';
 import { Listbox, Transition } from '@headlessui/react';
 import { CheckIcon as CheckMini, ChevronUpDownIcon } from '@heroicons/react/20/solid';
@@ -215,16 +216,16 @@ export default function CampaignEditPage() {
 
     const backHref = `/dashboard/company/${hash}/campaigns`;
     const templateCreateHref = `/dashboard/company/${hash}/templates/create`;
-    const domainCreateHref   = `/dashboard/company/${hash}/domains/create`;
-    const listCreateHref     = `/dashboard/company/${hash}/lists/create`;
-    const segmentCreateHref  = `/dashboard/company/${hash}/segments/create`;
+    const domainCreateHref = `/dashboard/company/${hash}/domains/create`;
+    const listCreateHref = `/dashboard/company/${hash}/lists/create`;
+    const segmentCreateHref = `/dashboard/company/${hash}/segments/create`;
 
     /* ------------------------ Picklists ------------------------ */
 
-    const listsUrl     = useMemo(() => (backend ? `${backend}/companies/${hash}/lists?perPage=200` : null), [backend, hash]);
-    const segmentsUrl  = useMemo(() => (backend ? `${backend}/companies/${hash}/segments?perPage=200` : null), [backend, hash]);
+    const listsUrl = useMemo(() => (backend ? `${backend}/companies/${hash}/lists?perPage=200` : null), [backend, hash]);
+    const segmentsUrl = useMemo(() => (backend ? `${backend}/companies/${hash}/segments?perPage=200` : null), [backend, hash]);
     const templatesUrl = useMemo(() => (backend ? `${backend}/companies/${hash}/templates?perPage=200` : null), [backend, hash]);
-    const domainsUrl   = useMemo(() => (backend ? `${backend}/companies/${hash}/domains` : null), [backend, hash]);
+    const domainsUrl = useMemo(() => (backend ? `${backend}/companies/${hash}/domains` : null), [backend, hash]);
 
     const [lists, setLists] = useState<ListSummary[]>([]);
     const [segments, setSegments] = useState<SegmentSummary[]>([]);
@@ -258,7 +259,9 @@ export default function CampaignEditPage() {
                 if (!abort) setPickErr(e instanceof Error ? e.message : String(e));
             }
         })();
-        return () => { abort = true; };
+        return () => {
+            abort = true;
+        };
     }, [listsUrl, segmentsUrl, templatesUrl]);
 
     useEffect(() => {
@@ -274,7 +277,9 @@ export default function CampaignEditPage() {
                 if (!abort) setPickErr((prev) => prev ?? (e instanceof Error ? e.message : String(e)));
             }
         })();
-        return () => { abort = true; };
+        return () => {
+            abort = true;
+        };
     }, [domainsUrl]);
 
     /* ---------------------- Load campaign ---------------------- */
@@ -292,6 +297,7 @@ export default function CampaignEditPage() {
     const [segmentId, setSegmentId] = useState<number | ''>('');
     const [sendMode, setSendMode] = useState<SendMode>('immediate');
     const [scheduledAtLocal, setScheduledAtLocal] = useState(''); // local yyyy-MM-ddThh:mm
+    const [status, setStatus] = useState<CampaignStatus>('draft');
 
     const campaignUrl = useMemo(() => (backend ? `${backend}/companies/${hash}/campaigns/${id}` : null), [backend, hash, id]);
 
@@ -310,12 +316,14 @@ export default function CampaignEditPage() {
                 setCampaignId(c.id);
                 setName(c.name ?? '');
                 setSubject(c.subject ?? '');
-                setTemplateId((c.template_id ?? '') as any);
-                setDomainId((c.domain_id ?? '') as any);
+                setTemplateId((c.template_id ?? '') as number | '');
+                setDomainId((c.domain_id ?? '') as number | '');
                 setTarget(c.target);
-                setListGroupId((c.listGroup_id ?? '') as any);
-                setSegmentId((c.segment_id ?? '') as any);
+                setListGroupId((c.listGroup_id ?? '') as number | '');
+                setSegmentId((c.segment_id ?? '') as number | '');
                 setSendMode(c.send_mode);
+                setStatus(c.status);
+
                 if (c.scheduled_at) {
                     const d = new Date(c.scheduled_at);
                     const pad = (n: number) => String(n).padStart(2, '0');
@@ -330,7 +338,9 @@ export default function CampaignEditPage() {
                 if (!abort) setLoading(false);
             }
         })();
-        return () => { abort = true; };
+        return () => {
+            abort = true;
+        };
     }, [campaignUrl]);
 
     /* -------------------------- Recipients -------------------------- */
@@ -364,7 +374,9 @@ export default function CampaignEditPage() {
                 if (!abort) setRecipsLoading(false);
             }
         })();
-        return () => { abort = true; };
+        return () => {
+            abort = true;
+        };
     }, [recipientsUrl]);
 
     /* ---------------------------- Helpers --------------------------- */
@@ -378,7 +390,11 @@ export default function CampaignEditPage() {
 
     const toLocale = (iso?: string | null) => {
         if (!iso) return '—';
-        try { return new Date(iso).toLocaleString(); } catch { return iso; }
+        try {
+            return new Date(iso).toLocaleString();
+        } catch {
+            return iso ?? '—';
+        }
     };
 
     const resetPreviewPage = () => setPage(1);
@@ -412,12 +428,40 @@ export default function CampaignEditPage() {
             throw new Error(`Save failed (${res.status}) ${txt || ''}`);
         }
         const updated: Campaign = await res.json();
-        // sync ids that could have changed server-side
-        setTemplateId((updated.template_id ?? '') as any);
-        setDomainId((updated.domain_id ?? '') as any);
-        setListGroupId((updated.listGroup_id ?? '') as any);
-        setSegmentId((updated.segment_id ?? '') as any);
+        setTemplateId((updated.template_id ?? '') as number | '');
+        setDomainId((updated.domain_id ?? '') as number | '');
+        setListGroupId((updated.listGroup_id ?? '') as number | '');
+        setSegmentId((updated.segment_id ?? '') as number | '');
+        setStatus(updated.status);
         return updated.id;
+    }
+
+    async function onDuplicate() {
+        if (!backend) return;
+        setActionErr(null);
+        setActionMsg(null);
+        setActing(true);
+        try {
+            const idNew = await saveChanges();
+            if (!idNew) throw new Error('No campaign ID to duplicate.');
+
+            const res = await fetch(`${backend}/companies/${hash}/campaigns/${idNew}/duplicate`, {
+                method: 'POST',
+                headers: authHeaders(),
+            });
+            if (!res.ok) {
+                const txt = await res.text().catch(() => '');
+                throw new Error(`Duplicate failed (${res.status}) ${txt || ''}`);
+            }
+
+            const created = (await res.json()) as Campaign;
+            setActionMsg('Duplicated. Redirecting…');
+            router.push(`/dashboard/company/${hash}/campaigns/${created.id}/edit`);
+        } catch (e) {
+            setActionErr(e instanceof Error ? e.message : String(e));
+        } finally {
+            setActing(false);
+        }
     }
 
     /* ------------------------------ Actions ------------------------------ */
@@ -431,10 +475,12 @@ export default function CampaignEditPage() {
     const [actionMsg, setActionMsg] = useState<string | null>(null);
 
     async function onSave() {
-        setSaveErr(null); setSaveMsg(null); setSaving(true);
+        setSaveErr(null);
+        setSaveMsg(null);
+        setSaving(true);
         try {
-            const id = await saveChanges();
-            setSaveMsg(`Saved (ID ${id}).`);
+            const idSaved = await saveChanges();
+            setSaveMsg(`Saved (ID ${idSaved}).`);
         } catch (e) {
             setSaveErr(e instanceof Error ? e.message : String(e));
         } finally {
@@ -443,45 +489,79 @@ export default function CampaignEditPage() {
     }
 
     async function onSchedule() {
-        setActionErr(null); setActionMsg(null); setActing(true);
+        // Guard against invalid states
+        if (!canSchedule) return;
+        setActionErr(null);
+        setActionMsg(null);
+        setActing(true);
         try {
             if (sendMode !== 'scheduled') throw new Error('Select “Scheduled” and a date/time to schedule.');
             if (!scheduledAtLocal) throw new Error('Please pick a date & time.');
-            const id = await saveChanges();
+            const idSaved = await saveChanges();
             const iso = toISOFromLocal(scheduledAtLocal);
             if (!iso) throw new Error('Invalid schedule date/time.');
-            const res = await fetch(`${backend}/companies/${hash}/campaigns/${id}/schedule`, {
-                method: 'POST', headers: authHeaders(), body: JSON.stringify({ scheduled_at: iso }),
+            const res = await fetch(`${backend}/companies/${hash}/campaigns/${idSaved}/schedule`, {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ scheduled_at: iso }),
             });
             const payload = (await res.json()) as Campaign | { error?: string };
-            if (!res.ok) throw new Error(('error' in payload && payload.error) ? payload.error : `Schedule failed (${res.status})`);
+            if (!res.ok) throw new Error('error' in payload && payload.error ? payload.error : `Schedule failed (${res.status})`);
             setActionMsg(`Scheduled for ${toLocale((payload as Campaign).scheduled_at)}.`);
+            setStatus((payload as Campaign).status);
         } catch (e) {
             setActionErr(e instanceof Error ? e.message : String(e));
-        } finally { setActing(false); }
+        } finally {
+            setActing(false);
+        }
     }
 
     async function onSendNow() {
-        setActionErr(null); setActionMsg(null); setActing(true);
+        if (!canSendNow) return;
+        setActionErr(null);
+        setActionMsg(null);
+        setActing(true);
         try {
-            const id = await saveChanges();
-            const res = await fetch(`${backend}/companies/${hash}/campaigns/${id}/send`, {
-                method: 'POST', headers: authHeaders(),
+            const idSaved = await saveChanges();
+            const res = await fetch(`${backend}/companies/${hash}/campaigns/${idSaved}/send`, {
+                method: 'POST',
+                headers: authHeaders(),
             });
             const payload = (await res.json()) as Campaign | { error?: string };
-            if (!res.ok) throw new Error(('error' in payload && payload.error) ? payload.error : `Send failed (${res.status})`);
+            if (!res.ok) throw new Error('error' in payload && payload.error ? payload.error : `Send failed (${res.status})`);
             setActionMsg('Sending started.');
+            setStatus((payload as Campaign).status);
         } catch (e) {
             setActionErr(e instanceof Error ? e.message : String(e));
-        } finally { setActing(false); }
+        } finally {
+            setActing(false);
+        }
     }
 
     async function refreshRecipients() {
         if (!campaignId) return;
         resetPreviewPage();
-        setPage((p) => (p === 1 ? 2 : 1)); // force refresh trick
+        setPage((p) => (p === 1 ? 2 : 1));
         setPage(1);
     }
+
+    /* ------------------------------ Derived UI permissions ------------------------------ */
+
+    const isCancelled = status === 'cancelled';
+    const isCompleted = status === 'completed';
+    const isSending = status === 'sending';
+    const isScheduled = status === 'scheduled';
+    const isPaused = status === 'paused';
+    const isDraft = status === 'draft';
+
+    // You can only trigger a new send from a draft.
+    const canSendNow = isDraft;
+
+    // You can only schedule from a draft (not when already scheduled/sending/paused/completed/cancelled).
+    const canSchedule = isDraft;
+
+    // Preview recipients disabled if cancelled (per request) or there is no campaign yet.
+    const canPreviewRecipients = !isCancelled && !!campaignId;
 
     /* ------------------------------ Render ------------------------------ */
 
@@ -501,14 +581,15 @@ export default function CampaignEditPage() {
     const segmentOptions: SBOption[] = segments.map((s) => ({ value: s.id, label: s.name }));
 
     if (loading) return <p className="p-6 text-center text-gray-600">Loading…</p>;
-    if (loadErr) return (
-        <div className="p-6 text-center">
-            <p className="text-red-600">{loadErr}</p>
-            <button onClick={() => router.push(backHref)} className="mt-3 inline-flex items-center px-3 py-2 rounded border">
-                <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back
-            </button>
-        </div>
-    );
+    if (loadErr)
+        return (
+            <div className="p-6 text-center">
+                <p className="text-red-600">{loadErr}</p>
+                <button onClick={() => router.push(backHref)} className="mt-3 inline-flex items-center px-3 py-2 rounded border">
+                    <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back
+                </button>
+            </div>
+        );
 
     return (
         <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -517,7 +598,10 @@ export default function CampaignEditPage() {
                 <button onClick={() => router.push(backHref)} className="inline-flex items-center text-gray-600 hover:text-gray-800">
                     <ArrowLeftIcon className="h-5 w-5 mr-1" /> Back
                 </button>
-                <h1 className="text-2xl font-semibold">Edit Campaign</h1>
+                <h1 className="text-2xl font-semibold">
+                    Edit Campaign
+                    <span className="ml-3 align-middle text-sm font-normal px-2 py-0.5 rounded-full border">{status}</span>
+                </h1>
                 <div className="flex gap-2">
                     <button
                         onClick={onSave}
@@ -644,9 +728,9 @@ export default function CampaignEditPage() {
             <div className="flex flex-wrap items-center gap-3">
                 <button
                     onClick={onSendNow}
-                    disabled={acting}
+                    disabled={acting || !canSendNow}
                     className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
-                    title="Send immediately"
+                    title={canSendNow ? 'Send immediately' : 'Sending is only available for drafts'}
                 >
                     <PaperAirplaneIcon className="h-5 w-5 mr-1" />
                     {acting ? 'Working…' : 'Send now'}
@@ -654,9 +738,9 @@ export default function CampaignEditPage() {
 
                 <button
                     onClick={onSchedule}
-                    disabled={acting}
+                    disabled={acting || !canSchedule}
                     className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
-                    title="Schedule this campaign"
+                    title={canSchedule ? 'Schedule this campaign' : 'Scheduling is only available for drafts'}
                 >
                     <CalendarDaysIcon className="h-5 w-5 mr-1" />
                     {acting ? 'Working…' : 'Schedule'}
@@ -664,21 +748,44 @@ export default function CampaignEditPage() {
 
                 <button
                     onClick={async () => {
+                        if (!canPreviewRecipients) return;
                         try {
-                            const id = await saveChanges();
-                            if (!id) return;
+                            const idSaved = await saveChanges();
+                            if (!idSaved) return;
                             await refreshRecipients();
                         } catch (e) {
                             setActionErr(e instanceof Error ? e.message : String(e));
                         }
                     }}
-                    disabled={!campaignId && acting}
+                    disabled={!canPreviewRecipients || acting}
                     className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
-                    title="Preview recipients"
+                    title={canPreviewRecipients ? 'Preview recipients' : 'Preview disabled for cancelled campaigns'}
                 >
                     <EyeIcon className="h-5 w-5 mr-1" />
                     Preview recipients
                 </button>
+
+                <div className="flex gap-2">
+                    <button
+                        onClick={onDuplicate}
+                        disabled={acting || loading}
+                        className="px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
+                        title="Create a new draft with the same settings"
+                    >
+                        <DocumentDuplicateIcon className="h-5 w-5 inline-block mr-1" />
+                        Duplicate
+                    </button>
+
+                    <button
+                        onClick={onSave}
+                        disabled={saving}
+                        className="px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
+                        title="Save"
+                    >
+                        <CheckIcon className="h-5 w-5 inline-block mr-1" />
+                        {saving ? 'Saving…' : 'Save changes'}
+                    </button>
+                </div>
 
                 {saveErr && <span className="text-sm text-red-600">{saveErr}</span>}
                 {saveMsg && <span className="text-sm text-green-700">{saveMsg}</span>}
@@ -686,7 +793,13 @@ export default function CampaignEditPage() {
                 {actionMsg && <span className="text-sm text-green-700">{actionMsg}</span>}
 
                 <div className="ml-auto text-sm text-gray-500">
-                    {campaignId ? <>Campaign ID: <span className="font-mono">{campaignId}</span></> : '—'}
+                    {campaignId ? (
+                        <>
+                            Campaign ID: <span className="font-mono">{campaignId}</span>
+                        </>
+                    ) : (
+                        '—'
+                    )}
                 </div>
             </div>
 
@@ -695,13 +808,17 @@ export default function CampaignEditPage() {
                 <div className="p-3 border-b flex items-center justify-between">
                     <h2 className="text-lg font-semibold">Recipients</h2>
                     <div className="text-sm text-gray-600">
-                        {recips?.meta
-                            ? <>Page <span className="font-medium">{recips.meta.page}</span> / {recips.meta.totalPages} · {recips.meta.total} total</>
-                            : recipsLoading
-                                ? 'Loading…'
-                                : campaignId
-                                    ? 'Click “Preview recipients”'
-                                    : 'Save the campaign first'}
+                        {recips?.meta ? (
+                            <>
+                                Page <span className="font-medium">{recips.meta.page}</span> / {recips.meta.totalPages} · {recips.meta.total} total
+                            </>
+                        ) : recipsLoading ? (
+                            'Loading…'
+                        ) : campaignId ? (
+                            'Click “Preview recipients”'
+                        ) : (
+                            'Save the campaign first'
+                        )}
                     </div>
                 </div>
 
@@ -719,14 +836,24 @@ export default function CampaignEditPage() {
                             </thead>
                             <tbody>
                             {recipsLoading && !recips ? (
-                                <tr><td className="px-3 py-6 text-center text-gray-500" colSpan={3}>Loading…</td></tr>
+                                <tr>
+                                    <td className="px-3 py-6 text-center text-gray-500" colSpan={3}>
+                                        Loading…
+                                    </td>
+                                </tr>
                             ) : !recips || recips.items.length === 0 ? (
-                                <tr><td className="px-3 py-6 text-center text-gray-500" colSpan={3}>No recipients.</td></tr>
+                                <tr>
+                                    <td className="px-3 py-6 text-center text-gray-500" colSpan={3}>
+                                        No recipients.
+                                    </td>
+                                </tr>
                             ) : (
                                 recips.items.map((c) => (
                                     <tr key={c.id} className="border-t">
                                         <td className="px-3 py-2">{c.name || <span className="text-gray-500 italic">(no name)</span>}</td>
-                                        <td className="px-3 py-2"><span className="font-mono text-xs">{c.email ?? '—'}</span></td>
+                                        <td className="px-3 py-2">
+                                            <span className="font-mono text-xs">{c.email ?? '—'}</span>
+                                        </td>
                                         <td className="px-3 py-2">{c.status ?? '—'}</td>
                                     </tr>
                                 ))
@@ -738,7 +865,9 @@ export default function CampaignEditPage() {
 
                 {/* Pagination */}
                 <div className="p-3 border-t flex items-center justify-between">
-                    <div className="text-sm text-gray-600">Per page: <span className="font-medium">{perPage}</span></div>
+                    <div className="text-sm text-gray-600">
+                        Per page: <span className="font-medium">{perPage}</span>
+                    </div>
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -760,7 +889,9 @@ export default function CampaignEditPage() {
 
             {/* Footer */}
             <div className="flex items-center justify-between">
-                <Link href={backHref} className="text-sm text-gray-600 hover:text-gray-800">← Back to campaigns</Link>
+                <Link href={backHref} className="text-sm text-gray-600 hover:text-gray-800">
+                    ← Back to campaigns
+                </Link>
                 <div />
             </div>
         </div>

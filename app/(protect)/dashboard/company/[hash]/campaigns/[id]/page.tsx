@@ -4,7 +4,13 @@ import React, { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
-    ArrowLeftIcon, PaperAirplaneIcon, CalendarDaysIcon, PauseIcon, PlayIcon, XMarkIcon,
+    ArrowLeftIcon,
+    PaperAirplaneIcon,
+    CalendarDaysIcon,
+    PauseIcon,
+    PlayIcon,
+    XMarkIcon,
+    DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline';
 
 /* ----------------------------- Types ----------------------------- */
@@ -76,11 +82,15 @@ export default function CampaignDetailPage() {
 
     const toLocale = (iso?: string | null) => {
         if (!iso) return '—';
-        try { return new Date(iso).toLocaleString(); } catch { return iso; }
+        try {
+            return new Date(iso).toLocaleString();
+        } catch {
+            return iso ?? '—';
+        }
     };
 
-    const campaignUrl   = useMemo(() => `${backend}/companies/${hash}/campaigns/${id}`, [backend, hash, id]);
-    const statsUrl      = useMemo(() => `${backend}/companies/${hash}/campaigns/${id}/stats`, [backend, hash, id]);
+    const campaignUrl = useMemo(() => `${backend}/companies/${hash}/campaigns/${id}`, [backend, hash, id]);
+    const statsUrl = useMemo(() => `${backend}/companies/${hash}/campaigns/${id}/stats`, [backend, hash, id]);
     const recipientsUrl = useMemo(() => {
         const sp = new URLSearchParams({ page: String(page), perPage: String(perPage) });
         return `${backend}/companies/${hash}/campaigns/${id}/recipients?${sp.toString()}`;
@@ -103,21 +113,23 @@ export default function CampaignDetailPage() {
             ]);
             if (dRes.ok) {
                 const dJson: DomainSummary[] = await dRes.json();
-                setDomains(Object.fromEntries(dJson.map(d => [d.id, d])));
+                setDomains(Object.fromEntries(dJson.map((d) => [d.id, d])));
             }
             if (tRes.ok) {
-                const tJson = await tRes.json() as { items: TemplateSummary[] };
-                setTemplates(Object.fromEntries((tJson.items ?? []).map(t => [t.id, t])));
+                const tJson = (await tRes.json()) as { items: TemplateSummary[] };
+                setTemplates(Object.fromEntries((tJson.items ?? []).map((t) => [t.id, t])));
             }
             if (lRes.ok) {
-                const lJson = await lRes.json() as { items: ListSummary[] };
-                setLists(Object.fromEntries((lJson.items ?? []).map(l => [l.id, l])));
+                const lJson = (await lRes.json()) as { items: ListSummary[] };
+                setLists(Object.fromEntries((lJson.items ?? []).map((l) => [l.id, l])));
             }
             if (sRes.ok) {
-                const sJson = await sRes.json() as { items: SegmentSummary[] };
-                setSegments(Object.fromEntries((sJson.items ?? []).map(s => [s.id, s])));
+                const sJson = (await sRes.json()) as { items: SegmentSummary[] };
+                setSegments(Object.fromEntries((sJson.items ?? []).map((s) => [s.id, s])));
             }
-        } catch {/* silent */}
+        } catch {
+            /* silent */
+        }
     };
 
     // Fetch campaign + stats + lookups
@@ -144,10 +156,14 @@ export default function CampaignDetailPage() {
                 if (!abort) setLoading(false);
             }
         })();
-        return () => { abort = true; };
+        return () => {
+            abort = true;
+        };
     }, [campaignUrl, statsUrl]);
 
-    useEffect(() => { loadLookups(); /* fire & forget */ }, [backend, hash]);
+    useEffect(() => {
+        loadLookups();
+    }, [backend, hash]);
 
     // Fetch recipients
     useEffect(() => {
@@ -161,12 +177,15 @@ export default function CampaignDetailPage() {
                 const json: RecipientsPage = await res.json();
                 if (!abort) setRecips(json);
             } catch (e) {
-                if (!abort) setRecips({ meta: { page: 1, perPage, total: 0, totalPages: 0 }, items: [] });
+                if (!abort)
+                    setRecips({ meta: { page: 1, perPage, total: 0, totalPages: 0 }, items: [] });
             } finally {
                 if (!abort) setLoadingRecips(false);
             }
         })();
-        return () => { abort = true; };
+        return () => {
+            abort = true;
+        };
     }, [recipientsUrl, backend, perPage]);
 
     function updateQuery(partial: Record<string, unknown>) {
@@ -178,53 +197,114 @@ export default function CampaignDetailPage() {
         router.replace(`?${sp.toString()}`);
     }
 
+    /* ------------------------------ Derived UI permissions (same logic as Edit) ------------------------------ */
+    const canSend = data?.status === 'draft'; // only from draft
+    const canSchedule = data?.status === 'draft'; // only from draft
+    const canPause = data?.status === 'sending' || data?.status === 'scheduled';
+    const canResume = data?.status === 'paused';
+    const canCancel = !!data && !['completed', 'cancelled'].includes(data.status);
+
+    const reasonSend =
+        canSend ? 'Send immediately' : 'Sending is only available for drafts';
+    const reasonSchedule =
+        canSchedule ? 'Schedule this campaign' : 'Scheduling is only available for drafts';
+    const reasonPause =
+        canPause ? 'Pause sending' : 'Available while sending or scheduled';
+    const reasonResume =
+        canResume ? 'Resume sending' : 'Available only when paused';
+    const reasonCancel =
+        canCancel ? 'Cancel this campaign' : 'Already completed/cancelled';
+
     async function callAction(path: 'send' | 'schedule' | 'pause' | 'resume' | 'cancel') {
         if (!data) return;
-        setActing(true); setActionErr(null); setActionMsg(null);
+        setActing(true);
+        setActionErr(null);
+        setActionMsg(null);
         try {
-            // schedule needs a scheduled_at; since this is read-only, only allow if server already has one
-            const body = path === 'schedule' && data.scheduled_at ? { scheduled_at: data.scheduled_at } : undefined;
+            // Enforce same guards client-side too
+            if (path === 'send' && !canSend) throw new Error('This campaign cannot be sent in its current status.');
+            if (path === 'schedule' && !canSchedule) throw new Error('This campaign cannot be scheduled in its current status.');
+            if (path === 'pause' && !canPause) throw new Error('This campaign cannot be paused right now.');
+            if (path === 'resume' && !canResume) throw new Error('This campaign is not paused.');
+            if (path === 'cancel' && !canCancel) throw new Error('This campaign cannot be cancelled.');
+
+            // schedule needs scheduled_at; since this is read-only, require it to already exist
+            const body =
+                path === 'schedule' && data.scheduled_at ? { scheduled_at: data.scheduled_at } : undefined;
             if (path === 'schedule' && !body) throw new Error('No schedule set. Use Edit to set a time.');
+
             const res = await fetch(`${backend}/companies/${hash}/campaigns/${data.id}/${path}`, {
-                method: 'POST', headers: authHeaders(), body: body ? JSON.stringify(body) : undefined,
+                method: 'POST',
+                headers: authHeaders(),
+                body: body ? JSON.stringify(body) : undefined,
             });
-            if (!res.ok) throw new Error(`Action failed (${res.status})`);
+
+            if (!res.ok) {
+                const txt = await res.text().catch(() => '');
+                throw new Error(`Action failed (${res.status}) ${txt || ''}`);
+            }
+
             const updated: Campaign = await res.json();
             setData(updated);
-            setStats(prev => prev ? { ...prev, status: updated.status } : prev);
+            setStats((prev) => (prev ? { ...prev, status: updated.status } : prev));
             setActionMsg(
-                path === 'send' ? 'Sending started.'
-                    : path === 'schedule' ? 'Scheduled.'
-                        : path === 'pause' ? 'Paused.'
-                            : path === 'resume' ? 'Resumed.'
+                path === 'send'
+                    ? 'Sending started.'
+                    : path === 'schedule'
+                        ? 'Scheduled.'
+                        : path === 'pause'
+                            ? 'Paused.'
+                            : path === 'resume'
+                                ? 'Resumed.'
                                 : 'Cancelled.'
             );
         } catch (e) {
             setActionErr(e instanceof Error ? e.message : String(e));
-        } finally { setActing(false); }
+        } finally {
+            setActing(false);
+        }
+    }
+
+    async function duplicateCampaign() {
+        if (!backend || !data) return;
+        setActing(true);
+        setActionErr(null);
+        setActionMsg(null);
+        try {
+            const res = await fetch(`${backend}/companies/${hash}/campaigns/${data.id}/duplicate`, {
+                method: 'POST',
+                headers: authHeaders(),
+            });
+            if (!res.ok) {
+                const txt = await res.text().catch(() => '');
+                throw new Error(`Duplicate failed (${res.status}) ${txt || ''}`);
+            }
+            const created: Campaign = await res.json();
+            setActionMsg('Duplicated. Redirecting to edit…');
+            router.push(`/dashboard/company/${hash}/campaigns/${created.id}/edit`);
+        } catch (e) {
+            setActionErr(e instanceof Error ? e.message : String(e));
+        } finally {
+            setActing(false);
+        }
     }
 
     if (loading && !data) return <p className="p-6 text-center text-gray-600">Loading campaign…</p>;
-    if (err) return (
-        <div className="p-6 text-center">
-            <p className="text-red-600">{err}</p>
-            <button onClick={() => router.push(backHref)} className="mt-3 inline-flex items-center px-3 py-2 rounded border">
-                <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back
-            </button>
-        </div>
-    );
+    if (err)
+        return (
+            <div className="p-6 text-center">
+                <p className="text-red-600">{err}</p>
+                <button onClick={() => router.push(backHref)} className="mt-3 inline-flex items-center px-3 py-2 rounded border">
+                    <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back
+                </button>
+            </div>
+        );
     if (!data) return null;
 
-    const domainName   = data.domain_id   ? domains[data.domain_id]?.domain ?? `#${data.domain_id}` : '—';
+    const domainName = data.domain_id ? domains[data.domain_id]?.domain ?? `#${data.domain_id}` : '—';
     const templateName = data.template_id ? templates[data.template_id]?.name ?? `#${data.template_id}` : '—';
-    const listName     = data.listGroup_id? lists[data.listGroup_id]?.name ?? `#${data.listGroup_id}` : '—';
-    const segmentName  = data.segment_id  ? segments[data.segment_id]?.name ?? `#${data.segment_id}` : '—';
-
-    const canPause    = data.status === 'sending' || data.status === 'scheduled';
-    const canResume   = data.status === 'paused';
-    const canSend     = data.status === 'draft';
-    const canSchedule = data.status === 'draft';
-    const canCancel   = !['completed','cancelled'].includes(data.status);
+    const listName = data.listGroup_id ? lists[data.listGroup_id]?.name ?? `#${data.listGroup_id}` : '—';
+    const segmentName = data.segment_id ? segments[data.segment_id]?.name ?? `#${data.segment_id}` : '—';
 
     return (
         <div className="max-w-6xl mx-auto p-6 space-y-6">
@@ -235,8 +315,11 @@ export default function CampaignDetailPage() {
                 </button>
                 <h1 className="text-2xl font-semibold">
                     Campaign: {data.name || <span className="text-gray-500 italic">(unnamed)</span>}
+                    <span className="ml-3 align-middle text-sm font-normal px-2 py-0.5 rounded-full border">{data.status}</span>
                 </h1>
-                <Link href={editHref} className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50">Edit</Link>
+                <Link href={editHref} className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50">
+                    Edit
+                </Link>
             </div>
 
             {/* Read-only basics */}
@@ -249,9 +332,7 @@ export default function CampaignDetailPage() {
                     <div>
                         <dt className="text-sm text-gray-500">Status</dt>
                         <dd className="mt-1">
-              <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs">
-                {data.status}
-              </span>
+                            <span className="inline-flex items-center rounded-full border px-2 py-0.5 text-xs">{data.status}</span>
                         </dd>
                     </div>
                     <div>
@@ -296,13 +377,13 @@ export default function CampaignDetailPage() {
                 </dl>
             </div>
 
-            {/* Actions (no edit of fields, but lifecycle actions allowed) */}
+            {/* Actions (lifecycle controls with same rules as Edit) */}
             <div className="flex flex-wrap items-center gap-3">
                 <button
                     onClick={() => callAction('send')}
                     disabled={!canSend || acting}
                     className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
-                    title="Send immediately"
+                    title={reasonSend}
                 >
                     <PaperAirplaneIcon className="h-5 w-5 mr-1" />
                     {acting ? 'Working…' : 'Send now'}
@@ -312,7 +393,7 @@ export default function CampaignDetailPage() {
                     onClick={() => callAction('schedule')}
                     disabled={!canSchedule || acting}
                     className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
-                    title="Schedule sending"
+                    title={reasonSchedule}
                 >
                     <CalendarDaysIcon className="h-5 w-5 mr-1" />
                     {acting ? 'Working…' : 'Schedule'}
@@ -322,7 +403,7 @@ export default function CampaignDetailPage() {
                     onClick={() => callAction('pause')}
                     disabled={!canPause || acting}
                     className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
-                    title="Pause"
+                    title={reasonPause}
                 >
                     <PauseIcon className="h-5 w-5 mr-1" /> Pause
                 </button>
@@ -331,7 +412,7 @@ export default function CampaignDetailPage() {
                     onClick={() => callAction('resume')}
                     disabled={!canResume || acting}
                     className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
-                    title="Resume"
+                    title={reasonResume}
                 >
                     <PlayIcon className="h-5 w-5 mr-1" /> Resume
                 </button>
@@ -340,9 +421,19 @@ export default function CampaignDetailPage() {
                     onClick={() => callAction('cancel')}
                     disabled={!canCancel || acting}
                     className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
-                    title="Cancel"
+                    title={reasonCancel}
                 >
                     <XMarkIcon className="h-5 w-5 mr-1" /> Cancel
+                </button>
+
+                <button
+                    onClick={duplicateCampaign}
+                    disabled={acting}
+                    className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
+                    title="Create a new draft with the same settings"
+                >
+                    <DocumentDuplicateIcon className="h-5 w-5 mr-1" />
+                    Duplicate
                 </button>
 
                 {(actionErr || actionMsg) && (
@@ -378,7 +469,11 @@ export default function CampaignDetailPage() {
                         {loadingRecips
                             ? 'Loading…'
                             : recips?.meta
-                                ? <>Page <span className="font-medium">{recips.meta.page}</span> / {recips.meta.totalPages} · {recips.meta.total} total</>
+                                ? (
+                                    <>
+                                        Page <span className="font-medium">{recips.meta.page}</span> / {recips.meta.totalPages} · {recips.meta.total} total
+                                    </>
+                                )
                                 : '—'}
                     </div>
                 </div>
@@ -393,14 +488,26 @@ export default function CampaignDetailPage() {
                         </thead>
                         <tbody>
                         {loadingRecips && !recips ? (
-                            <tr><td className="px-3 py-6 text-center text-gray-500" colSpan={3}>Loading…</td></tr>
+                            <tr>
+                                <td className="px-3 py-6 text-center text-gray-500" colSpan={3}>
+                                    Loading…
+                                </td>
+                            </tr>
                         ) : !recips || recips.items.length === 0 ? (
-                            <tr><td className="px-3 py-6 text-center text-gray-500" colSpan={3}>No recipients.</td></tr>
+                            <tr>
+                                <td className="px-3 py-6 text-center text-gray-500" colSpan={3}>
+                                    No recipients.
+                                </td>
+                            </tr>
                         ) : (
                             recips.items.map((r) => (
                                 <tr key={r.id} className="border-t">
-                                    <td className="px-3 py-2">{r.name || <span className="text-gray-500 italic">(no name)</span>}</td>
-                                    <td className="px-3 py-2"><span className="font-mono text-xs">{r.email ?? '—'}</span></td>
+                                    <td className="px-3 py-2">
+                                        {r.name || <span className="text-gray-500 italic">(no name)</span>}
+                                    </td>
+                                    <td className="px-3 py-2">
+                                        <span className="font-mono text-xs">{r.email ?? '—'}</span>
+                                    </td>
                                     <td className="px-3 py-2">{r.status ?? '—'}</td>
                                 </tr>
                             ))
@@ -411,7 +518,9 @@ export default function CampaignDetailPage() {
 
                 {/* Pagination */}
                 <div className="p-3 border-t flex items-center justify-between">
-                    <div className="text-sm text-gray-600">Per page: <span className="font-medium">{perPage}</span></div>
+                    <div className="text-sm text-gray-600">
+                        Per page: <span className="font-medium">{perPage}</span>
+                    </div>
                     <div className="flex items-center gap-2">
                         <button
                             onClick={() => updateQuery({ page: Math.max(1, page - 1) })}
@@ -433,7 +542,9 @@ export default function CampaignDetailPage() {
 
             {/* Footer */}
             <div className="flex items-center justify-between">
-                <Link href={backHref} className="text-sm text-gray-600 hover:text-gray-800">← Back to campaigns</Link>
+                <Link href={backHref} className="text-sm text-gray-600 hover:text-gray-800">
+                    ← Back to campaigns
+                </Link>
                 <div />
             </div>
         </div>

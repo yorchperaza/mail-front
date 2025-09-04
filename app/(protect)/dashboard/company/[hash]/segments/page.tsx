@@ -11,7 +11,7 @@ import {
     TrashIcon,
     PlayCircleIcon,
     XMarkIcon,
-    EyeIcon,
+    EyeIcon, ClipboardDocumentIcon,
 } from '@heroicons/react/24/outline';
 
 type SegmentItem = {
@@ -20,6 +20,7 @@ type SegmentItem = {
     definition: Record<string, any> | null;
     materialized_count: number | null;
     last_built_at: string | null;
+    hash?: string | null;
 };
 
 type ApiListResponse<T> = {
@@ -147,6 +148,24 @@ export default function SegmentsListPage() {
         if (qFromUrl) sp.set('search', qFromUrl);
         return `${backend}/companies/${hash}/segments?${sp.toString()}`;
     }, [backend, hash, page, perPage, qFromUrl]);
+
+    const [copied, setCopied] = useState<string | null>(null);
+
+    const maskHash = (h?: string | null) => {
+        if (!h) return '—';
+        const s = String(h);
+        if (s.length <= 12) return s;
+        return `${s.slice(0, 6)}…${s.slice(-4)}`;
+    };
+    const copyHash = async (value: string) => {
+        try {
+            await navigator.clipboard.writeText(value);
+            setCopied(value);
+            setTimeout(() => setCopied(null), 1200);
+        } catch {
+            setCopied(null);
+        }
+    };
 
     // fetch
     useEffect(() => {
@@ -327,6 +346,7 @@ export default function SegmentsListPage() {
                     <thead className="bg-gray-50 text-gray-700">
                     <tr className="text-left">
                         <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Hash</th>
                         <th className="px-3 py-2">Definition</th>
                         <th className="px-3 py-2 w-32">Count</th>
                         <th className="px-3 py-2 w-56">Last Built</th>
@@ -343,6 +363,25 @@ export default function SegmentsListPage() {
                     ) : items.map(s => (
                         <tr key={s.id} className="border-t align-top">
                             <td className="px-3 py-2">{s.name}</td>
+                            <td className="px-3 py-2">
+                                {s.hash ? (
+                                    <div className="flex items-center gap-2">
+                                        <code className="text-xs bg-gray-100 px-2 py-0.5 rounded border">
+                                            {maskHash(s.hash)}
+                                        </code>
+                                        <button
+                                            onClick={() => copyHash(s.hash!)}
+                                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded border hover:bg-gray-50 text-xs"
+                                            title="Copy full hash"
+                                        >
+                                            <ClipboardDocumentIcon className="h-4 w-4" />
+                                            {copied === s.hash ? 'Copied' : 'Copy'}
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <span className="text-gray-400">—</span>
+                                )}
+                            </td>
                             <td className="px-3 py-2">
                                 <DefinitionChips def={s.definition} />
                             </td>

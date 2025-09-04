@@ -62,7 +62,7 @@ const STATE_LABEL: Record<string, string> = {
     sent: 'Sent',
     failed: 'Failed',
     preview: 'Preview',
-    queue_failed: 'Queue Failed',
+    queue_failed: 'Failed',
 };
 
 function toLocale(s?: string | null) {

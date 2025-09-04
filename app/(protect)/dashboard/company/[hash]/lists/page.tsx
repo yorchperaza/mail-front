@@ -11,12 +11,15 @@ import {
     MagnifyingGlassIcon,
     XMarkIcon,
     EyeIcon,
+    ClipboardDocumentIcon,
+    CheckIcon,
 } from '@heroicons/react/24/outline';
 
 type ListGroup = {
     id: number;
     name: string;
     created_at?: string | null;
+    hash?: string | null; // ← include hash coming from backend
     counts?: {
         contacts?: number | null;
         campaigns?: number | null;
@@ -54,6 +57,9 @@ export default function ListsIndexPage() {
     const [renaming, setRenaming] = useState(false);
 
     const [deletingId, setDeletingId] = useState<number | null>(null);
+
+    // for copy feedback per-row
+    const [copiedForId, setCopiedForId] = useState<number | null>(null);
 
     const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
     const authHeaders = (): HeadersInit => {
@@ -168,6 +174,33 @@ export default function ListsIndexPage() {
 
     const backHref = `/dashboard/company/${hash}`;
 
+    // helpers for hash display/copy
+    const maskHash = (h?: string | null) => {
+        if (!h) return '—';
+        const s = String(h);
+        if (s.length <= 12) return s;
+        return `${s.slice(0, 6)}…${s.slice(-4)}`;
+    };
+
+    const copyHash = async (id: number, h?: string | null) => {
+        if (!h) return;
+        try {
+            await navigator.clipboard.writeText(h);
+            setCopiedForId(id);
+            setTimeout(() => setCopiedForId(null), 1200);
+        } catch {
+            // fallback: create a temp input
+            const el = document.createElement('textarea');
+            el.value = h;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            setCopiedForId(id);
+            setTimeout(() => setCopiedForId(null), 1200);
+        }
+    };
+
     if (loading && !data) return <p className="p-6 text-center text-gray-600">Loading lists…</p>;
     if (err) return (
         <div className="p-6 text-center">
@@ -251,6 +284,7 @@ export default function ListsIndexPage() {
                     <thead className="bg-gray-50 text-gray-700">
                     <tr className="text-left">
                         <th className="px-3 py-2">Name</th>
+                        <th className="px-3 py-2">Hash</th> {/* ← new column */}
                         <th className="px-3 py-2"># Contacts</th>
                         <th className="px-3 py-2">Created</th>
                         <th className="px-3 py-2"></th>
@@ -259,7 +293,7 @@ export default function ListsIndexPage() {
                     <tbody>
                     {items.length === 0 ? (
                         <tr>
-                            <td className="px-3 py-6 text-center text-gray-500" colSpan={4}>
+                            <td className="px-3 py-6 text-center text-gray-500" colSpan={5}>
                                 No lists found.
                             </td>
                         </tr>
@@ -267,6 +301,39 @@ export default function ListsIndexPage() {
                         items.map((g) => (
                             <tr key={g.id} className="border-t">
                                 <td className="px-3 py-2">{g.name}</td>
+
+                                {/* Hash cell: masked display + copy button */}
+                                <td className="px-3 py-2">
+                                    <div className="inline-flex items-center gap-2">
+                                        <code title="Hash (truncated)" className="text-gray-700">
+                                            {maskHash(g.hash)}
+                                        </code>
+                                        {g.hash ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => copyHash(g.id, g.hash!)}
+                                                className="inline-flex items-center gap-1 px-2 py-1 rounded border hover:bg-gray-50"
+                                                title="Copy full hash"
+                                                aria-label="Copy full hash"
+                                            >
+                                                {copiedForId === g.id ? (
+                                                    <>
+                                                        <CheckIcon className="h-4 w-4" />
+                                                        <span className="text-xs">Copied</span>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <ClipboardDocumentIcon className="h-4 w-4" />
+                                                        <span className="text-xs">Copy</span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        ) : (
+                                            <span className="text-gray-400">—</span>
+                                        )}
+                                    </div>
+                                </td>
+
                                 <td className="px-3 py-2">{g.counts?.contacts ?? '—'}</td>
                                 <td className="px-3 py-2">{toLocale(g.created_at)}</td>
                                 <td className="px-3 py-2">

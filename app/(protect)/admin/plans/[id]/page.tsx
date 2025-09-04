@@ -37,6 +37,8 @@ type Plan = {
     includedMessages: number | null;
     averagePricePer1K: number | null;
     features: PlanFeatures | null;
+    /** From backend shape() */
+    stripePriceId?: string | null;
 };
 
 type PatchBody = Partial<{
@@ -109,6 +111,10 @@ export default function PlanEditPage() {
     const [includedMessages, setIncludedMessages] = useState('');
     const [averagePricePer1K, setAveragePricePer1K] = useState('');
 
+    // Track originals to describe Stripe action
+    const [initialMonthlyPrice, setInitialMonthlyPrice] = useState<number | null>(null);
+    const [stripePriceId, setStripePriceId] = useState<string | null | undefined>(null);
+
     // Features – Quotas
     const [emailsPerDay, setEmailsPerDay] = useState('');
     const [emailsPerMonth, setEmailsPerMonth] = useState('');
@@ -146,7 +152,8 @@ export default function PlanEditPage() {
             setLoading(true);
             setLoadErr(null);
             try {
-                const res = await fetch(`${backend}/plans/${id}`, { headers: authHeaders() });
+                // GET matches your controller's GET route
+                const res = await fetch(`${backend}/plans-id/${id}`, { headers: authHeaders() });
                 if (!res.ok) throw new Error(`Failed to load plan (${res.status})`);
                 const p: Plan = await res.json();
 
@@ -155,6 +162,9 @@ export default function PlanEditPage() {
                 setMonthlyPrice(str(p.monthlyPrice));
                 setIncludedMessages(str(p.includedMessages));
                 setAveragePricePer1K(str(p.averagePricePer1K));
+
+                setInitialMonthlyPrice(p.monthlyPrice ?? null);
+                setStripePriceId(p.stripePriceId ?? null);
 
                 // Features with safe fallbacks
                 const f = p.features ?? {
@@ -242,11 +252,31 @@ export default function PlanEditPage() {
         ]
     );
 
-    const canSubmit = name.trim().length > 0;
+    const parsedMonthly = useMemo(() => decOrNull(monthlyPrice), [monthlyPrice]);
+    const invalidMonthly = useMemo(() => {
+        if (monthlyPrice.trim() === '') return false; // allow blank (custom/free)
+        const n = decOrNull(monthlyPrice);
+        return n === null || n < 0; // negative or NaN is invalid
+    }, [monthlyPrice]);
+
+    // Describe how Stripe will react on save (backend handles it)
+    const stripeAction: 'none' | 'create' | 'rotate' | 'detach' = useMemo(() => {
+        if (invalidMonthly) return 'none';
+        const before = (initialMonthlyPrice ?? 0) > 0 ? initialMonthlyPrice! : 0;
+        const after = (parsedMonthly ?? 0) > 0 ? parsedMonthly! : 0;
+
+        if (before === 0 && after === 0) return 'none';
+        if (before === 0 && after > 0) return 'create';
+        if (before > 0 && after === 0) return 'detach';
+        if (before > 0 && after > 0 && before !== after) return 'rotate';
+        return 'none';
+    }, [invalidMonthly, initialMonthlyPrice, parsedMonthly]);
+
+    const canSubmit = name.trim().length > 0 && !invalidMonthly;
 
     async function onSave() {
         if (!backend || !id) return setErr('Missing backend URL or id');
-        if (!canSubmit) return setErr('Please enter a name.');
+        if (!canSubmit) return setErr('Please fix the highlighted fields.');
 
         setSaving(true);
         setErr(null);
@@ -255,21 +285,40 @@ export default function PlanEditPage() {
         try {
             const raw: PatchBody = {
                 name: name.trim(),
-                monthlyPrice: decOrNull(monthlyPrice),
+                monthlyPrice: parsedMonthly ?? null, // <= 0 or blank -> free/custom
                 includedMessages: intOrNull(includedMessages),
                 averagePricePer1K: decOrNull(averagePricePer1K),
                 features,
             };
             const payload = compactDeep(raw);
 
+            // PATCH matches your controller
             const res = await fetch(`${backend}/plans/${id}`, {
                 method: 'PATCH',
                 headers: authHeaders(),
                 body: JSON.stringify(payload),
             });
-            const json = (await res.json()) as Plan | { error?: string };
-            if (!res.ok) throw new Error('error' in json && json.error ? json.error : `Save failed (${res.status})`);
-            setSaveMsg('Saved.');
+            const json = await res.json();
+            if (!res.ok) {
+                const msg = (json && (json.error || json.message)) || `Save failed (${res.status})`;
+                throw new Error(msg);
+            }
+
+            const updated = json as Plan;
+            setStripePriceId(updated.stripePriceId ?? null);
+
+            const suffix =
+                stripeAction === 'create'
+                    ? updated.stripePriceId ? ` Stripe Price: ${updated.stripePriceId}` : ''
+                    : stripeAction === 'rotate'
+                        ? updated.stripePriceId ? ` New Stripe Price: ${updated.stripePriceId}` : ' (rotated Stripe price)'
+                        : stripeAction === 'detach'
+                            ? ' (plan is now free/custom; Stripe product/price detached or archived)'
+                            : '';
+
+            setSaveMsg(`Saved.${suffix}`);
+            // refresh baseline for further edits
+            setInitialMonthlyPrice(updated.monthlyPrice ?? null);
         } catch (e) {
             setErr(e instanceof Error ? e.message : String(e));
         } finally {
@@ -327,15 +376,65 @@ export default function PlanEditPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium mb-1">Monthly price (USD)</label>
+                        <div className="flex items-center justify-between">
+                            <label className="block text-sm font-medium mb-1">Monthly price (USD)</label>
+                            {/* Stripe action badge */}
+                            <span
+                                className={
+                                    'text-xs px-2 py-1 rounded border ' +
+                                    (invalidMonthly
+                                        ? 'border-red-300 text-red-700 bg-red-50'
+                                        : stripeAction === 'create'
+                                            ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
+                                            : stripeAction === 'rotate'
+                                                ? 'border-blue-300 text-blue-700 bg-blue-50'
+                                                : stripeAction === 'detach'
+                                                    ? 'border-amber-300 text-amber-700 bg-amber-50'
+                                                    : 'border-gray-300 text-gray-600 bg-gray-50')
+                                }
+                                title={
+                                    invalidMonthly
+                                        ? 'Enter a non-negative number, or leave blank for custom/free'
+                                        : stripeAction === 'create'
+                                            ? 'Will create a Stripe Product + monthly Price'
+                                            : stripeAction === 'rotate'
+                                                ? 'Will create a new Stripe Price and leave the old one inactive'
+                                                : stripeAction === 'detach'
+                                                    ? 'Will make this plan free/custom; backend will detach/archive Stripe objects'
+                                                    : 'No Stripe changes'
+                                }
+                            >
+                {invalidMonthly
+                    ? 'Invalid price'
+                    : stripeAction === 'create'
+                        ? 'Stripe: will create Product + Price'
+                        : stripeAction === 'rotate'
+                            ? 'Stripe: will rotate Price'
+                            : stripeAction === 'detach'
+                                ? 'Stripe: will detach (free/custom)'
+                                : 'Stripe: no change'}
+              </span>
+                        </div>
                         <input
                             inputMode="decimal"
                             value={monthlyPrice}
                             onChange={(e) => setMonthlyPrice(e.target.value)}
                             placeholder="e.g. 50"
-                            className="w-full rounded border px-3 py-2"
+                            className={
+                                'w-full rounded border px-3 py-2 ' +
+                                (invalidMonthly ? 'border-red-400 focus:outline-red-500' : '')
+                            }
                         />
-                        <p className="text-xs text-gray-500 mt-1">Leave blank for custom pricing.</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Leave blank or set to 0 for custom/free. Any value &gt; 0 will create or rotate a Stripe monthly Price.
+                        </p>
+
+                        {/* Show current Stripe Price ID if present */}
+                        {stripePriceId ? (
+                            <p className="mt-2 text-xs text-gray-600">Current Stripe Price: <span className="font-mono">{stripePriceId}</span></p>
+                        ) : (
+                            <p className="mt-2 text-xs text-gray-400">No Stripe Price attached.</p>
+                        )}
                     </div>
 
                     <div>

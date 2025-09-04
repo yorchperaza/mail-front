@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeftIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, PlayCircleIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 
 /* ---------- Types ---------- */
 type Definition = {
@@ -20,6 +20,7 @@ type Segment = {
     definition: Definition | null;
     materialized_count: number | null;
     last_built_at: string | null;
+    hash?: string | null; // 👈 include hash
 };
 
 type ApiPaged<T> = {
@@ -58,7 +59,6 @@ export default function SegmentPreviewPage() {
     const authHeaders = (): HeadersInit => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('jwt') : null;
         return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-        // NOTE: server sends user_id via middleware; this header is here in case you also check bearer
     };
 
     const backHref = `/dashboard/company/${hash}/segments`;
@@ -185,7 +185,25 @@ export default function SegmentPreviewPage() {
             setBuildErr(e instanceof Error ? e.message : String(e));
         } finally {
             setBuilding(false);
-            // keep the table as-is (preview endpoint is read-only)
+        }
+    }
+
+    /* ---------- Hash helpers ---------- */
+    const [copied, setCopied] = useState(false);
+    const maskHash = (h?: string | null) => {
+        if (!h) return '—';
+        const s = String(h);
+        if (s.length <= 12) return s;
+        return `${s.slice(0, 6)}…${s.slice(-4)}`;
+    };
+    async function copyHash(full?: string | null) {
+        if (!full) return;
+        try {
+            await navigator.clipboard.writeText(full);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+        } catch {
+            setCopied(false);
         }
     }
 
@@ -246,13 +264,33 @@ export default function SegmentPreviewPage() {
                 <button onClick={() => router.push(backHref)} className="inline-flex items-center text-gray-600 hover:text-gray-800">
                     <ArrowLeftIcon className="h-5 w-5 mr-1" /> Back
                 </button>
+
                 <div className="min-w-0">
                     <h1 className="text-2xl font-semibold truncate">{segment.name}</h1>
-                    <div className="mt-1 text-sm text-gray-600">
-                        Count: <span className="font-medium">{segment.materialized_count ?? '—'}</span>
-                        {' '}· Last built: {toLocale(segment.last_built_at)}
+                    <div className="mt-1 text-sm text-gray-600 flex flex-wrap items-center gap-3">
+            <span>
+              Count: <span className="font-medium">{segment.materialized_count ?? '—'}</span>
+                {' '}· Last built: {toLocale(segment.last_built_at)}
+            </span>
+                        {/* Hash display */}
+                        {segment.hash ? (
+                            <span className="inline-flex items-center gap-2">
+                <code className="text-xs bg-gray-100 px-2 py-0.5 rounded border">
+                  {maskHash(segment.hash)}
+                </code>
+                <button
+                    onClick={() => copyHash(segment.hash)}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded border hover:bg-gray-50 text-xs"
+                    title="Copy full hash"
+                >
+                  <ClipboardDocumentIcon className="h-4 w-4" />
+                    {copied ? 'Copied' : 'Copy'}
+                </button>
+              </span>
+                        ) : null}
                     </div>
                 </div>
+
                 <button
                     onClick={handleBuildNow}
                     disabled={building}

@@ -14,6 +14,8 @@ type Plan = {
     includedMessages: number | null;
     averagePricePer1K: number | null;
     features: PlanFeatures | null;
+    /** <-- added so we can show a success hint when Stripe objects were created */
+    stripePriceId?: string | null;
 };
 
 type PlanFeatures = {
@@ -49,12 +51,11 @@ type PostBody = {
 
 /* ----------------------------- Helpers ---------------------------- */
 
-// keep ints as ints, decimals as floats:
 function intOrNull(s: string): number | null {
     const t = s.trim();
     if (t === '') return null;
     const n = Number(t);
-    return Number.isInteger(n) ? n : Number.isFinite(n) ? Math.trunc(n) : null;
+    return Number.isFinite(n) ? Math.trunc(n) : null;
 }
 function decOrNull(s: string): number | null {
     const t = s.trim();
@@ -63,7 +64,6 @@ function decOrNull(s: string): number | null {
     return Number.isFinite(n) ? n : null;
 }
 
-// remove null/undefined recursively; keep 0/false/'' out (we don’t send '')
 function compactDeep<T>(obj: T): T {
     if (Array.isArray(obj)) {
         return obj
@@ -99,7 +99,7 @@ export default function PlanCreatePage() {
 
     // Basics
     const [name, setName] = useState('');
-    const [monthlyPrice, setMonthlyPrice] = useState('');
+    const [monthlyPrice, setMonthlyPrice] = useState(''); // blank => no Stripe product
     const [includedMessages, setIncludedMessages] = useState('');
     const [averagePricePer1K, setAveragePricePer1K] = useState('');
 
@@ -123,7 +123,7 @@ export default function PlanCreatePage() {
     const [webhooks, setWebhooks] = useState(false);
     const [templates, setTemplates] = useState(false);
     const [dedicatedIp, setDedicatedIp] = useState(false);
-    const [sto, setSto] = useState(false); // send-time optimization
+    const [sto, setSto] = useState(false);
 
     // Features – Support
     const [supportTier, setSupportTier] = useState<'ticket' | 'email' | 'chat_phone' | 'sla'>('ticket');
@@ -134,7 +134,16 @@ export default function PlanCreatePage() {
     const [err, setErr] = useState<string | null>(null);
     const [saveMsg, setSaveMsg] = useState<string | null>(null);
 
-    // Assemble features JSON from UX fields (with correct numeric types)
+    // Derived flags for Stripe behavior (driven entirely by backend)
+    const parsedMonthly = useMemo(() => decOrNull(monthlyPrice), [monthlyPrice]);
+    const willCreateStripe = (parsedMonthly ?? 0) > 0; // backend creates Product+Price only if > 0
+    const invalidMonthly = useMemo(() => {
+        if (monthlyPrice.trim() === '') return false; // empty is allowed (custom/free)
+        const n = decOrNull(monthlyPrice);
+        return n === null || n < 0; // disallow negatives and non-numbers
+    }, [monthlyPrice]);
+
+    // Assemble features JSON
     const features: PlanFeatures = useMemo(
         () => ({
             quotas: {
@@ -186,27 +195,24 @@ export default function PlanCreatePage() {
         ]
     );
 
-    const canSubmit = name.trim().length > 0;
+    const canSubmit = name.trim().length > 0 && !invalidMonthly;
 
     async function onCreate(openAfter: boolean) {
         if (!backend) return setErr('Missing backend URL');
-        if (!canSubmit) return setErr('Please enter a name.');
+        if (!canSubmit) return setErr('Please fix the highlighted fields.');
 
         setSaving(true);
         setErr(null);
         setSaveMsg(null);
 
         try {
-            // Top-level numbers: float for decimals, int for counts
             const rawPayload: PostBody = {
                 name: name.trim(),
-                monthlyPrice: decOrNull(monthlyPrice),
+                monthlyPrice: parsedMonthly ?? null, // null/blank -> backend treats as custom/free
                 includedMessages: intOrNull(includedMessages),
                 averagePricePer1K: decOrNull(averagePricePer1K),
                 features,
             };
-
-            // Don’t send null/undefined/'' keys; keeps API payload clean
             const payload = compactDeep(rawPayload);
 
             const res = await fetch(`${backend}/plans`, {
@@ -215,13 +221,20 @@ export default function PlanCreatePage() {
                 body: JSON.stringify(payload),
             });
 
-            const json = (await res.json()) as Plan | { error?: string };
+            const json = await res.json();
             if (!res.ok) {
-                throw new Error('error' in json && json.error ? json.error : `Create failed (${res.status})`);
+                const msg =
+                    (json && (json.error || json.message)) ||
+                    `Create failed (${res.status})`;
+                throw new Error(msg);
             }
 
             const created = json as Plan;
-            setSaveMsg('Created.');
+            setSaveMsg(
+                willCreateStripe && created.stripePriceId
+                    ? `Created. Stripe Price: ${created.stripePriceId}`
+                    : 'Created.'
+            );
             router.push(openAfter ? detailHref(created.id) : backHref);
         } catch (e) {
             setErr(e instanceof Error ? e.message : String(e));
@@ -273,15 +286,46 @@ export default function PlanCreatePage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium mb-1">Monthly price (USD)</label>
+                        <div className="flex items-center justify-between">
+                            <label className="block text-sm font-medium mb-1">Monthly price (USD)</label>
+                            {/* Stripe intent badge */}
+                            <span
+                                className={
+                                    'text-xs px-2 py-1 rounded border ' +
+                                    (invalidMonthly
+                                        ? 'border-red-300 text-red-700 bg-red-50'
+                                        : willCreateStripe
+                                            ? 'border-emerald-300 text-emerald-700 bg-emerald-50'
+                                            : 'border-gray-300 text-gray-600 bg-gray-50')
+                                }
+                                title={
+                                    invalidMonthly
+                                        ? 'Enter a non-negative number, or leave blank for custom/free'
+                                        : willCreateStripe
+                                            ? 'A Stripe Product + monthly Price will be created'
+                                            : 'Blank or 0 means no Stripe Product/Price will be created'
+                                }
+                            >
+                {invalidMonthly
+                    ? 'Invalid price'
+                    : willCreateStripe
+                        ? 'Stripe: will create Product + Price'
+                        : 'Stripe: none (custom/free)'}
+              </span>
+                        </div>
                         <input
                             inputMode="decimal"
                             value={monthlyPrice}
                             onChange={(e) => setMonthlyPrice(e.target.value)}
                             placeholder="e.g. 50"
-                            className="w-full rounded border px-3 py-2"
+                            className={
+                                'w-full rounded border px-3 py-2 ' +
+                                (invalidMonthly ? 'border-red-400 focus:outline-red-500' : '')
+                            }
                         />
-                        <p className="text-xs text-gray-500 mt-1">Leave blank for custom pricing.</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Leave blank or set to 0 for custom/free. Any value &gt; 0 will create a Stripe Product + monthly Price.
+                        </p>
                     </div>
 
                     <div>

@@ -8,19 +8,21 @@ import {
     ClipboardIcon,
     CheckIcon,
     GlobeAltIcon,
+    SparklesIcon,
 } from '@heroicons/react/24/outline';
 import copy from 'copy-to-clipboard';
 
 /* ---------- Types ---------- */
 interface UserBrief   { id: number; email: string; fullName: string | null }
 interface DomainBrief { id: number; domain: string | null; statusDomain: string | null }
+interface PlanBrief   { id?: number; name: string | null }
 interface CompanyDetail {
     hash: string;
     name: string | null;
     phone_number: string | null;
     address: { street?: string; city?: string; zip?: string; country?: string } | null;
     users:   UserBrief[];
-    // domains on the company payload are ignored here; we fetch from /domains endpoint
+    plan?:   PlanBrief | null;
     domains?: DomainBrief[];
 }
 
@@ -51,7 +53,6 @@ export default function CompanyDetailPage() {
                 if (!res.ok) throw new Error(`Failed to load company: ${res.status}`);
 
                 const data = await res.json();
-                // reassemble JSON fragments if address came as an array
                 if (Array.isArray(data.address)) {
                     try {
                         const joined = data.address.join(',');
@@ -69,7 +70,7 @@ export default function CompanyDetailPage() {
         })();
     }, [hash]);
 
-    // Load domains from /companies/{hash}/domains
+    // Load domains
     useEffect(() => {
         (async () => {
             try {
@@ -99,7 +100,7 @@ export default function CompanyDetailPage() {
             <div className="max-w-md text-center space-y-4">
                 <p className="text-red-600">{error || 'Unknown error'}</p>
                 <button onClick={() => router.push('/dashboard/company')}
-                        className="inline-flex items-center space-x-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">
+                        className="inline-flex items-center space-x-1 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200">
                     <ArrowLeftIcon className="h-4 w-4"/><span>Back</span>
                 </button>
             </div>
@@ -112,8 +113,24 @@ export default function CompanyDetailPage() {
     const handleCopy = () => {
         copy(company.hash);
         setCopied(true);
-        setTimeout(() => setCopied(false), 1000);
+        setTimeout(() => setCopied(false), 900);
     };
+
+    const statusBadge = (active: boolean) => (
+        <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium
+      ${active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${active ? 'bg-green-600' : 'bg-gray-500'}`} />
+            {active ? 'Active' : 'Inactive'}
+    </span>
+    );
+
+    // ORANGE plan pill
+    const planPill = (plan?: PlanBrief | null) => (
+        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-50 text-orange-700 text-xs font-medium">
+            <SparklesIcon className="h-4 w-4 text-orange-700" />
+            {plan?.name ?? 'No plan'}
+        </span>
+    );
 
     const badgeClasses = (status: string | null) => {
         switch (status) {
@@ -126,84 +143,101 @@ export default function CompanyDetailPage() {
 
     return (
         <div className="p-6 space-y-8">
-            {/* Header */}
-            <div className="flex items-center space-x-3">
-                <button onClick={() => router.back()}
-                        className="inline-flex items-center justify-center h-9 w-9 rounded-full hover:bg-gray-100">
-                    <ArrowLeftIcon className="h-5 w-5 text-gray-600"/><span className="sr-only">Back</span>
-                </button>
-                <h1 className="text-3xl font-semibold">{company.name || 'Untitled'}</h1>
+            {/* Toolbar / Header */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => router.push('/dashboard/company')}
+                        className="inline-flex items-center justify-center h-9 w-9 rounded-full hover:bg-gray-100"
+                    >
+                        <ArrowLeftIcon className="h-5 w-5 text-gray-600"/>
+                        <span className="sr-only">Back</span>
+                    </button>
+                    <div>
+                        <h1 className="text-3xl font-semibold text-gray-900 leading-tight">
+                            {company.name || 'Untitled'}
+                        </h1>
+                        <div className="mt-1 flex items-center gap-2">
+                            {statusBadge(!!company?.phone_number || true)}
+                            {planPill(company.plan)} {/* orange name */}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Quick Action */}
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleCopy}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border text-sm hover:bg-gray-50"
+                        title="Copy hash"
+                    >
+                        {copied
+                            ? <CheckIcon className="h-4 w-4 text-green-600"/>
+                            : <ClipboardIcon className="h-4 w-4 text-gray-600"/>}
+                        <span className="font-mono text-xs text-gray-700 truncate max-w-[160px]">{company.hash}</span>
+                    </button>
+                    {/* Manage Plan in ORANGE */}
+                    <Link
+                        href={`/dashboard/company/${hash}/settings/billing`}
+                        className="inline-flex items-center px-3 py-2 rounded-lg bg-orange-400 text-white text-sm hover:bg-orange-700"
+                    >
+                        Manage Plan
+                    </Link>
+                </div>
             </div>
 
-            {/* Company Info */}
-            <section className="bg-white rounded-lg shadow p-6 space-y-4">
-                <h2 className="text-lg font-medium">Company Info</h2>
-                <div className="grid gap-y-2 sm:grid-cols-2">
-                    {/* Hash */}
-                    <div className="flex items-start sm:items-center gap-2">
-                        <span className="block text-sm text-gray-500">Hash</span>
-                        <code className="font-mono text-xs bg-gray-100 rounded px-2 py-1 break-all sm:break-normal max-w-[12rem] sm:max-w-none truncate">
-                            {company.hash}
-                        </code>
-                        <button onClick={handleCopy}
-                                className="h-6 w-6 flex items-center justify-center rounded hover:bg-gray-200"
-                                title="Copy hash">
-                            {copied
-                                ? <CheckIcon className="h-4 w-4 text-green-600"/>
-                                : <ClipboardIcon className="h-4 w-4 text-gray-600"/>}
-                        </button>
+            {/* Top cards: Info / Address */}
+            <section className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Company Info */}
+                <div className="bg-white rounded-xl shadow-sm ring-1 ring-gray-100 p-6 space-y-4">
+                    <h2 className="text-lg font-medium text-gray-900">Company Info</h2>
+                    <div className="grid gap-y-3 sm:grid-cols-2">
+                        {/* Phone */}
+                        {company.phone_number ? (
+                            <div>
+                                <span className="block text-sm text-gray-500">Phone</span>
+                                <div className="text-gray-800">{company.phone_number}</div>
+                            </div>
+                        ) : (
+                            <div>
+                                <span className="block text-sm text-gray-500">Phone</span>
+                                <div className="text-gray-400">—</div>
+                            </div>
+                        )}
+
+                        {/* Plan (no ID shown) */}
+                        <div>
+                            <span className="block text-sm text-gray-500">Plan</span>
+                            <div>{planPill(company.plan)}</div> {/* orange name */}
+                        </div>
                     </div>
 
-                    {/* Phone */}
-                    {company.phone_number && (
-                        <div>
-                            <span className="block text-sm text-gray-500">Phone</span>
-                            {company.phone_number}
-                        </div>
-                    )}
+                </div>
 
-                    {/* Address */}
-                    {hasAddress && (
-                        <div className="sm:col-span-2">
-                            <span className="block text-sm text-gray-500">Address</span>
-                            <address className="not-italic leading-tight">
-                                {address?.street && <>{address.street}<br/></>}
-                                {(address?.city || address?.zip) && (
-                                    <>
-                                        {address.city}{address.city && address.zip ? ', ' : ''}
-                                        {address.zip}<br/>
-                                    </>
-                                )}
-                                {address?.country}
-                            </address>
-                        </div>
+                {/* Address */}
+                <div className="bg-white rounded-xl shadow-sm ring-1 ring-gray-100 p-6">
+                    <h2 className="text-lg font-medium text-gray-900 mb-3">Address</h2>
+                    {hasAddress ? (
+                        <address className="not-italic leading-relaxed text-gray-800">
+                            {address?.street && <>{address.street}<br/></>}
+                            {(address?.city || address?.zip) && (
+                                <>
+                                    {address.city}{address.city && address.zip ? ', ' : ''}
+                                    {address.zip}<br/>
+                                </>
+                            )}
+                            {address?.country}
+                        </address>
+                    ) : (
+                        <p className="text-gray-500 text-sm">No address on file.</p>
                     )}
                 </div>
             </section>
 
-            {/* Users */}
-            <section className="bg-white rounded-lg shadow p-6">
-                <h2 className="text-lg font-medium mb-4">Users</h2>
-                {company.users.length === 0 ? (
-                    <p className="text-gray-500 text-sm">No users found.</p>
-                ) : (
-                    <ul className="divide-y">
-                        {company.users.map(u => (
-                            <li key={u.id} className="py-2">
-                                <p className="font-medium">
-                                    {u.fullName ?? <span className="italic text-gray-500">No name</span>}
-                                </p>
-                                <p className="text-sm text-gray-500">{u.email}</p>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </section>
-
-            {/* Domains (fetched from /companies/{hash}/domains) */}
-            <section className="bg-white rounded-lg shadow p-6">
+            {/* Domains */}
+            <section className="bg-white rounded-xl shadow-sm ring-1 ring-gray-100 p-6">
                 <div className="mb-4 flex items-center justify-between">
-                    <h2 className="text-lg font-medium">Domains</h2>
+                    <h2 className="text-lg font-medium text-gray-900">Domains</h2>
                     <Link
                         href={`/dashboard/company/${hash}/domain`}
                         className="text-sm font-medium text-blue-600 hover:text-blue-700"
@@ -225,7 +259,7 @@ export default function CompanyDetailPage() {
                         </p>
                         <Link
                             href={`/dashboard/company/${hash}/domain/new`}
-                            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+                            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                         >
                             Add a Domain
                         </Link>
@@ -246,13 +280,43 @@ export default function CompanyDetailPage() {
                                         </h3>
                                     </div>
                                     <span className={`inline-block px-2 py-1 text-[11px] font-medium rounded ${badgeClasses(d.statusDomain)}`}>
-                    {d.statusDomain ?? 'unknown'}
-                  </span>
+                                        {d.statusDomain ?? 'unknown'}
+                                    </span>
                                 </div>
                                 <p className="text-sm text-gray-500">Manage this domain’s settings and records.</p>
                             </Link>
                         ))}
                     </div>
+                )}
+            </section>
+
+            {/* Users */}
+            <section className="bg-white rounded-xl shadow-sm ring-1 ring-gray-100 p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-lg font-medium text-gray-900">Users</h2>
+                    <Link
+                        href={`/dashboard/company/${hash}/users`}
+                        className="text-sm font-medium text-blue-600 hover:text-blue-700"
+                    >
+                        Manage users →
+                    </Link>
+                </div>
+
+                {company.users.length === 0 ? (
+                    <p className="text-gray-500 text-sm">No users found.</p>
+                ) : (
+                    <ul className="divide-y">
+                        {company.users.map(u => (
+                            <li key={u.id} className="py-3 flex items-start justify-between">
+                                <div>
+                                    <p className="font-medium text-gray-900">
+                                        {u.fullName ?? <span className="italic text-gray-500">No name</span>}
+                                    </p>
+                                    <p className="text-sm text-gray-500">{u.email}</p>
+                                </div>
+                            </li>
+                        ))}
+                    </ul>
                 )}
             </section>
         </div>

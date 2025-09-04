@@ -84,7 +84,6 @@ export default function CompanySidebar() {
             icon: GlobeAltIcon,
             children: [
                 { title: 'All domains', href: `${base}/domain` },
-                { title: 'Add domain', href: `${base}/domain/new` },
             ],
         },
         {
@@ -112,7 +111,7 @@ export default function CompanySidebar() {
             icon: RectangleStackIcon,
             children: [
                 { title: 'Templates', href: `${base}/templates` },
-                { title: 'Automations', href: `${base}/automations` },
+                // { title: 'Automations', href: `${base}/automations` },
                 { title: 'Campaigns', href: `${base}/campaigns` },
             ],
         },
@@ -139,8 +138,8 @@ export default function CompanySidebar() {
             children: [
                 { title: 'Users', href: `${base}/settings/users` },
                 { title: 'API keys', href: `${base}/settings/apikeys`, icon: KeyIcon },
-                { title: 'Billing', href: `${base}/billing`, icon: CreditCardIcon },
-                { title: 'Files', href: `${base}/files`, icon: FolderIcon },
+                { title: 'Billing', href: `${base}/settings/billing`, icon: CreditCardIcon },
+                // { title: 'Files', href: `${base}/files`, icon: FolderIcon },
             ],
         },
     ];

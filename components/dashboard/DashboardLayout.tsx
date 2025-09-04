@@ -14,8 +14,12 @@ interface DashboardLayoutProps {
 }
 
 export default function DashboardLayout({ user, children }: DashboardLayoutProps) {
-    const pathname = usePathname();
-    const showCompanySidebar = pathname?.startsWith('/dashboard/company/');
+    const rawPath = usePathname() || '';
+    const pathname = rawPath.replace(/\/+$/, ''); // normalize trailing slash
+
+    const isCompanyRoute   = pathname.startsWith('/dashboard/company/');
+    const isNewCompanyPage = pathname === '/dashboard/company/new';
+    const showCompanySidebar = isCompanyRoute && !isNewCompanyPage;
 
     return (
         <div className="min-h-screen flex flex-col">

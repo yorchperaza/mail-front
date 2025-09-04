@@ -1,0 +1,8 @@
+email,name,locale,timezone,status,consent_source,gdpr_consent_at,attributes
+alice@example.com,Alice Smith,en,Europe/Berlin,active,signup_form,2024-05-12T09:30:00Z,"{""plan"": ""pro"", ""tags"": [""beta"", ""vip""]}"
+bob@example.org,Bob Jones,en,America/New_York,active,manual_import,,first_seen=ads;utm=summer
+carla@demo.co,Carla Gomez,es,America/Mexico_City,active,signup_form,2024-11-01T15:00:00Z,"{""plan"": ""free""}"
+d.lee@acme.test,Daniel Lee,ko,Asia/Seoul,inactive,manual_cleanup,,
+eva+alias@example.net,Eva Müller,de,Europe/Berlin,active,webinar,2025-01-10T18:45:00Z,source=webinar;interest=security
+francois@ex.fr,François Dupont,fr,Europe/Paris,active,signup_form,,"{""gdpr"": ""yes""}"
+haruto@jp.co,Haruto Sato,ja,Asia/Tokyo,active,partner_referral,,ref=partner42

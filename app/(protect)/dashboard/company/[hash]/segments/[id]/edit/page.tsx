@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeftIcon, CheckIcon, PlayCircleIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, CheckIcon, PlayCircleIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline';
 
 /* ---------- Types ---------- */
 type Definition = {
@@ -20,6 +20,7 @@ type Segment = {
     definition: Definition | null;
     materialized_count: number | null;
     last_built_at: string | null;
+    hash?: string | null; // 👈 include hash from API
 };
 
 type ListSummary = {
@@ -96,6 +97,7 @@ export default function SegmentEditPage() {
 
     /* ---------- Form state ---------- */
     const [segmentId, setSegmentId] = useState<number | null>(segmentIdFromRoute);
+    const [segmentHash, setSegmentHash] = useState<string | null>(null); // 👈 hold hash for UI
     const [name, setName] = useState('');
     const [status, setStatus] = useState<string>(''); // '' = ignore
     const [emailContains, setEmailContains] = useState('');
@@ -140,6 +142,7 @@ export default function SegmentEditPage() {
 
                 // hydrate form
                 setSegmentId(s.id);
+                setSegmentHash(s.hash ?? null); // 👈 keep full hash for copy
                 setName(s.name ?? '');
 
                 const def: Definition = s.definition ?? {};
@@ -211,6 +214,7 @@ export default function SegmentEditPage() {
         // reflect server response
         setName(s.name ?? body.name);
         setSegmentId(s.id);
+        setSegmentHash(s.hash ?? segmentHash ?? null); // keep/refresh hash if returned
         return s.id;
     }
 
@@ -260,6 +264,25 @@ export default function SegmentEditPage() {
             return s;
         }
     };
+
+    /* ---------- Hash UI helpers ---------- */
+    const [copied, setCopied] = useState(false);
+    const maskHash = (h?: string | null) => {
+        if (!h) return '—';
+        const s = String(h);
+        if (s.length <= 12) return s;
+        return `${s.slice(0, 6)}…${s.slice(-4)}`;
+    };
+    async function copyHash(full?: string | null) {
+        if (!full) return;
+        try {
+            await navigator.clipboard.writeText(full);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 1200);
+        } catch {
+            setCopied(false);
+        }
+    }
 
     /* ---------- Render ---------- */
     if (loading) return <p className="p-6 text-center text-gray-600">Loading segment…</p>;
@@ -434,13 +457,24 @@ export default function SegmentEditPage() {
                 </button>
                 {saveErr && <span className="text-sm text-red-600">{saveErr}</span>}
                 {previewErr && <span className="text-sm text-red-600">{previewErr}</span>}
-                <div className="ml-auto text-sm text-gray-500">
-                    {segmentId ? (
-                        <>
-                            Segment ID: <span className="font-mono">{segmentId}</span>
-                        </>
+                <div className="ml-auto text-sm text-gray-500 flex items-center gap-3">
+                    {/* 👇 Hash display (masked) + copy */}
+                    {segmentHash ? (
+                        <span className="inline-flex items-center gap-2">
+              <code className="text-xs bg-gray-100 px-2 py-0.5 rounded border">
+                {maskHash(segmentHash)}
+              </code>
+              <button
+                  onClick={() => copyHash(segmentHash)}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded border hover:bg-gray-50 text-xs"
+                  title="Copy full hash"
+              >
+                <ClipboardDocumentIcon className="h-4 w-4" />
+                  {copied ? 'Copied' : 'Copy'}
+              </button>
+            </span>
                     ) : (
-                        '—'
+                        <span className="text-xs text-gray-400">hash: —</span>
                     )}
                 </div>
             </div>

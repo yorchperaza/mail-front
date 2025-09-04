@@ -132,12 +132,6 @@ export default function CompanySmtpListPage() {
                     <ArrowLeftIcon className="h-5 w-5 mr-1" /> Back
                 </button>
                 <h1 className="text-2xl font-semibold">SMTP Credentials</h1>
-                <Link
-                    href={`/dashboard/company/${hash}/smtp/new`}
-                    className="inline-flex items-center rounded bg-blue-700 px-3 py-2 text-white hover:bg-blue-800"
-                >
-                    <PlusIcon className="h-5 w-5 mr-1" /> New Credential
-                </Link>
             </div>
 
             {/* Password toast (after rotate/create) */}
@@ -188,7 +182,7 @@ export default function CompanySmtpListPage() {
                             <td className="px-3 py-2">
                                 <div className="flex items-center gap-2">
                                     <Link
-                                        href={`/dashboard/company/${hash}/smtp/${c.id}`}
+                                        href={`/dashboard/company/${hash}/messaging/smtp/${c.id}`}
                                         className="text-blue-700 hover:underline"
                                     >
                                         View
