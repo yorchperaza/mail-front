@@ -19,6 +19,7 @@ type DomainBrief = {
 
 const AVAILABLE_SCOPES = [
     { value: 'mail:send', label: 'Send Mail' },
+    { value: 'mail:send:list', label: 'Send to Lists' },
     { value: 'mail:read', label: 'Read Mail' },
     { value: 'domains:list', label: 'List Domains' },
     { value: 'users:manage', label: 'Manage Users' },
