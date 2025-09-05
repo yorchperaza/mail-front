@@ -23,6 +23,11 @@ export type DomainDetail = {
         mx_expected: MxRecord[] | null;
     };
     counts: {
+        cname: string;
+        records: string;
+        mx: number;
+        keys: number;
+        txt: string;
         dkimKeys: number;
         messages: number;
         tlsRptReports: number;

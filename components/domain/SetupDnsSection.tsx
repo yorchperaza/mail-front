@@ -1,16 +1,27 @@
+// File: RecordsTab.tsx
 'use client';
 
 import React from 'react';
 import copy from 'copy-to-clipboard';
 import {
-    CheckIcon,
     ClipboardIcon,
     ArrowPathIcon,
     InformationCircleIcon,
+    ServerIcon,
+    ShieldCheckIcon,
+    KeyIcon,
+    DocumentTextIcon,
+    EnvelopeIcon,
 } from '@heroicons/react/24/outline';
+import {
+    CheckCircleIcon as CheckCircleSolid,
+    XCircleIcon as XCircleSolid,
+    ClockIcon as ClockSolid,
+    ExclamationTriangleIcon as ExclamationTriangleSolid,
+} from '@heroicons/react/24/solid';
 import type { DomainDetail, MxRecord } from '@/types/domain';
 
-/* ---------- Narrow helper types to avoid `any` ---------- */
+/* ---------- Types ---------- */
 type DkimExpected = { name?: string; value?: string };
 
 type VerificationRecord = {
@@ -34,176 +45,274 @@ type VerificationReport = {
     records?: VerificationRecords;
 };
 
-/* ---------- Tiny building blocks ---------- */
+/* ---------- Helpers (safe object access, no any) ---------- */
+function getObj<T extends object = Record<string, unknown>>(v: unknown): T | null {
+    return v && typeof v === 'object' ? (v as T) : null;
+}
+
+/* ---------- Components ---------- */
 function CodeChip({ children }: { children: React.ReactNode }) {
     return (
-        <code className="font-mono text-[11px] md:text-xs bg-gray-100 rounded px-2 py-1 break-all">
+        <code className="inline-flex items-center rounded-md bg-gradient-to-r from-gray-100 to-gray-50 px-2 py-1 text-xs font-mono text-gray-700 border border-gray-200">
             {children}
         </code>
     );
 }
 
-function CopyBtn({ value }: { value?: string | null }) {
+function CopyBtn({ value, label = 'Copy' }: { value?: string | null; label?: string }) {
     const [copied, setCopied] = React.useState(false);
     if (!value) return null;
+
     return (
         <button
             type="button"
             onClick={() => {
                 copy(value);
                 setCopied(true);
-                setTimeout(() => setCopied(false), 900);
+                setTimeout(() => setCopied(false), 2000);
             }}
-            className="inline-flex items-center justify-center h-7 w-7 rounded hover:bg-gray-200"
-            title={copied ? 'Copied' : 'Copy'}
+            className="inline-flex items-center gap-1 rounded-md bg-indigo-100 px-2 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-200 transition-colors"
+            title={copied ? 'Copied!' : label}
         >
             {copied ? (
-                <CheckIcon className="h-4 w-4 text-green-600" />
+                <>
+                    <CheckCircleSolid className="h-3.5 w-3.5" />
+                    Copied
+                </>
             ) : (
-                <ClipboardIcon className="h-4 w-4 text-gray-600" />
+                <>
+                    <ClipboardIcon className="h-3.5 w-3.5" />
+                    {label}
+                </>
             )}
         </button>
     );
 }
 
-function Row({
-                 type,
-                 name,
-                 value,
-                 ttl = '1 hour',
-                 priority,
-             }: {
+function RecordRow({
+                       type,
+                       name,
+                       value,
+                       ttl = '3600',
+                       priority,
+                   }: {
     type: string;
     name: string | null | undefined;
     value: string | null | undefined;
     ttl?: string;
     priority?: number | null | undefined;
 }) {
+    const typeColors: Record<string, string> = {
+        TXT: 'bg-blue-100 text-blue-700 border-blue-200',
+        MX: 'bg-purple-100 text-purple-700 border-purple-200',
+        CNAME: 'bg-amber-100 text-amber-700 border-amber-200',
+        A: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    };
+
+    const typeClass = typeColors[type] || 'bg-gray-100 text-gray-700 border-gray-200';
+
     return (
-        <tr className="border-b last:border-0">
-            <td className="py-2 pr-4 text-sm">
-                <span className="rounded bg-gray-100 px-2 py-0.5">{type}</span>
+        <tr className="hover:bg-gray-50 transition-colors">
+            <td className="px-4 py-3 text-sm">
+        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-semibold border ${typeClass}`}>
+          {type}
+        </span>
             </td>
-            <td className="py-2 pr-4">
+            <td className="px-4 py-3">
                 <CodeChip>{name || '—'}</CodeChip>
             </td>
-            <td className="py-2 pr-2 max-w-[36rem]">
+            <td className="px-4 py-3 max-w-[36rem]">
                 <div className="flex items-center gap-2">
                     <CodeChip>{value || '—'}</CodeChip>
                     <CopyBtn value={value ?? undefined} />
                 </div>
             </td>
-            <td className="py-2 pr-4">{ttl}</td>
-            <td className="py-2 pr-4">{typeof priority === 'number' ? priority : '—'}</td>
+            <td className="px-4 py-3 text-sm text-gray-600">{ttl}s</td>
+            <td className="px-4 py-3 text-sm text-gray-900">
+                {typeof priority === 'number' ? (
+                    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+            {priority}
+          </span>
+                ) : (
+                    '—'
+                )}
+            </td>
         </tr>
     );
 }
 
-function Note({ children }: { children: React.ReactNode }) {
+function InfoNote({ children }: { children: React.ReactNode }) {
     return (
-        <div className="mt-3 text-sm text-gray-700 flex items-start gap-2">
+        <div className="mt-4 flex items-start gap-3 rounded-lg bg-blue-50 p-4 border border-blue-200">
             <InformationCircleIcon className="h-5 w-5 text-blue-600 shrink-0 mt-0.5" />
-            <div>{children}</div>
+            <div className="text-sm text-blue-900">{children}</div>
         </div>
     );
 }
 
-/* ---------- Status pill (per card) ---------- */
-function StatusPill({ status }: { status?: string }) {
-    const s = (status || '').toLowerCase();
-    const map: Record<string, string> = {
-        pass: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
-        fail: 'bg-red-50 text-red-700 ring-red-200',
-        skipped: 'bg-gray-50 text-gray-600 ring-gray-200',
-        pending: 'bg-amber-50 text-amber-700 ring-amber-200',
+function StatusBadge({ status }: { status?: string }) {
+    const statusConfig = {
+        pass: {
+            icon: CheckCircleSolid,
+            bgClass: 'bg-emerald-50',
+            textClass: 'text-emerald-700',
+            borderClass: 'border-emerald-200',
+            label: 'Verified',
+        },
+        fail: {
+            icon: XCircleSolid,
+            bgClass: 'bg-red-50',
+            textClass: 'text-red-700',
+            borderClass: 'border-red-200',
+            label: 'Failed',
+        },
+        skipped: {
+            icon: ClockSolid,
+            bgClass: 'bg-gray-50',
+            textClass: 'text-gray-600',
+            borderClass: 'border-gray-200',
+            label: 'Skipped',
+        },
+        pending: {
+            icon: ClockSolid,
+            bgClass: 'bg-amber-50',
+            textClass: 'text-amber-700',
+            borderClass: 'border-amber-200',
+            label: 'Pending',
+        },
     };
-    const cls = map[s] || map.pending;
-    const label = s ? s[0].toUpperCase() + s.slice(1) : 'Pending';
+
+    const config =
+        statusConfig[(status || '').toLowerCase() as keyof typeof statusConfig] || statusConfig.pending;
+    const Icon = config.icon;
+
     return (
-        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs ring-1 ${cls}`}>
-      {label}
+        <span
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${config.bgClass} ${config.textClass} border ${config.borderClass}`}
+        >
+      <Icon className="h-3.5 w-3.5" />
+            {config.label}
     </span>
     );
 }
 
-/* ---------- Expected/Found/Errors block ---------- */
-function DetailsBlock({
-                          record,
-                      }: {
+function VerificationDetails({
+                                 record,
+                             }: {
     record?: { host?: string; expected?: unknown; found?: unknown; errors?: unknown };
 }) {
     if (!record) return null;
 
-    const Pretty = ({ value }: { value: unknown }) => (
-        <pre className="whitespace-pre-wrap break-all text-xs bg-gray-50 rounded-md p-2 ring-1 ring-gray-200">
-      {typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-    </pre>
-    );
+    const PrettyValue = ({ value, type }: { value: unknown; type: 'expected' | 'found' | 'error' }) => {
+        const colorClasses = {
+            expected: 'bg-blue-50 border-blue-200',
+            found: 'bg-emerald-50 border-emerald-200',
+            error: 'bg-red-50 border-red-200',
+        };
+
+        // render only strings, never unknown → string
+        const text =
+            typeof value === 'string'
+                ? value
+                : (() => {
+                    try {
+                        return JSON.stringify(value, null, 2);
+                    } catch {
+                        return String(value);
+                    }
+                })();
+
+        return (
+            <pre className={`whitespace-pre-wrap break-all text-xs rounded-lg p-3 border font-mono ${colorClasses[type]}`}>
+        {text}
+      </pre>
+        );
+    };
 
     return (
-        <div className="mt-4 grid sm:grid-cols-3 gap-3">
+        <div className="mt-4 grid sm:grid-cols-3 gap-4">
             <div>
-                <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Host / Name</div>
-                <div className="text-sm">
-                    {record.host ? <CodeChip>{record.host}</CodeChip> : <span className="text-gray-500">—</span>}
+                <div className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-2">
+                    Host / Name
                 </div>
+                {record.host ? <CodeChip>{record.host}</CodeChip> : <span className="text-sm text-gray-500">Not specified</span>}
             </div>
+
             <div>
-                <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Expected</div>
-                <Pretty value={record.expected ?? '—'} />
+                <div className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-2">
+                    Expected Value
+                </div>
+                <PrettyValue value={record.expected ?? '—'} type="expected" />
             </div>
+
             <div>
-                <div className="text-[11px] uppercase tracking-wide text-gray-500 mb-1">Found</div>
-                <Pretty value={record.found ?? '—'} />
-                {record.errors ? (
-                    <div className="mt-2 text-xs text-red-700">
-                        <div className="font-medium">Errors</div>
-                        <Pretty value={record.errors} />
+                <div className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-2">
+                    Found Value
+                </div>
+                <PrettyValue value={record.found ?? '—'} type="found" />
+                {record.errors !== undefined && record.errors !== null && (
+                    <div className="mt-3">
+                        <div className="text-xs font-medium text-red-700 uppercase tracking-wider mb-2">
+                            Errors
+                        </div>
+                        <PrettyValue value={record.errors} type="error" />
                     </div>
-                ) : null}
+                )}
             </div>
         </div>
     );
 }
 
-/* ---------- Step wrapper with *inline* status ---------- */
-function StepCard({
-                      step,
-                      title,
-                      status,
-                      subtitle,
-                      children,
-                      accent = 'border-blue-200',
-                  }: {
+function DnsStepCard({
+                         step,
+                         title,
+                         status,
+                         subtitle,
+                         icon,
+                         children,
+                         color = 'indigo',
+                     }: {
     step: number;
     title: string;
     status?: string;
     subtitle?: React.ReactNode;
+    icon: React.ReactNode;
     children: React.ReactNode;
-    accent?: string;
+    color?: 'indigo' | 'emerald' | 'amber' | 'purple' | 'blue';
 }) {
+    const colors = {
+        indigo: 'from-indigo-500 to-indigo-600',
+        emerald: 'from-emerald-500 to-emerald-600',
+        amber: 'from-amber-500 to-amber-600',
+        purple: 'from-purple-500 to-purple-600',
+        blue: 'from-blue-500 to-blue-600',
+    };
+
     return (
-        <section className={`rounded-xl border ${accent} bg-white shadow-sm overflow-hidden`}>
-            <header className="flex items-start justify-between gap-3 p-4 sm:p-5 border-b bg-gradient-to-br from-gray-50 to-white">
-                <div className="flex items-start gap-3">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-600 text-white text-sm font-semibold">
-                        {step}
+        <section className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+            <header className={`bg-gradient-to-r ${colors[color]} px-6 py-4`}>
+                <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/20 backdrop-blur text-white text-sm font-bold">
+                            {step}
+                        </div>
+                        <div className="flex items-center gap-2 text-white">
+                            {icon}
+                            <div>
+                                <h3 className="text-sm font-semibold uppercase tracking-wider">{title}</h3>
+                                {subtitle && <p className="text-xs text-white/80 mt-0.5">{subtitle}</p>}
+                            </div>
+                        </div>
                     </div>
-                    <div className="min-w-0">
-                        <h3 className="text-base sm:text-lg font-semibold">{title}</h3>
-                        {subtitle ? <p className="text-sm text-gray-600 mt-0.5">{subtitle}</p> : null}
-                    </div>
-                </div>
-                <div className="pt-1">
-                    <StatusPill status={status} />
+                    <StatusBadge status={status} />
                 </div>
             </header>
-            <div className="p-4 sm:p-5">{children}</div>
+            <div className="p-6">{children}</div>
         </section>
     );
 }
 
-/* ---------- Main section ---------- */
+/* ---------- Main Component ---------- */
 export default function SetupDnsSection({
                                             detail,
                                             onRefresh,
@@ -221,264 +330,259 @@ export default function SetupDnsSection({
     const mx = (detail.records?.mx_expected ?? []) as MxRecord[];
     const dmarcName = `_dmarc.${domain}`;
 
-    // DKIM expected (optional, not declared on DomainDetail)
-    const dkim =
-        ((detail.records as (DomainDetail['records'] & { dkim_expected?: DkimExpected }) | undefined)
-            ?.dkim_expected) ?? undefined;
+    // DKIM expected (optional) — no any
+    const recObj = getObj(detail.records);
+    const dkim = (recObj?.dkim_expected ?? null) as DkimExpected | null;
 
-    // Verification report & timestamps (optional, not declared on DomainDetail)
-    const report =
-        ((detail as unknown as { verification_report?: VerificationReport }).verification_report) ?? null;
-
-    const lastChecked =
-        report?.checked_at ??
-        ((detail as unknown as { last_checked_at?: string }).last_checked_at ?? null);
-
+    // Verification report — no any
+    const detailObj = getObj(detail) as Record<string, unknown> | null;
+    const report = (detailObj?.verification_report ?? null) as VerificationReport | null;
+    const lastChecked = report?.checked_at ?? ((detailObj?.last_checked_at as string | undefined) ?? null);
     const recs: VerificationRecords = report?.records ?? {};
 
-    const prettyTime = (iso?: string | null) => {
-        if (!iso) return 'Not checked yet';
+    const formatTime = (iso?: string | null) => {
+        if (!iso) return 'Never';
         try {
             const d = new Date(iso);
-            return d.toLocaleString();
+            return d.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
         } catch {
             return String(iso);
         }
     };
 
     return (
-        <section className="space-y-6">
-            {/* Intro + refresh + last checked (no group list here) */}
-            <div className="bg-white rounded-xl shadow p-5 border">
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <h2 className="text-lg font-semibold">
-                            Set up DNS for <span className="text-blue-700">{domain}</span>
-                        </h2>
-                        <p className="text-sm text-gray-600 mt-1">
-                            Complete each step below in your DNS provider (Cloudflare, Route53, GoDaddy, etc).
-                            When done, click <span className="font-medium">Refresh</span> to re-check.
-                        </p>
+        <div className="space-y-6">
+            {/* Header Section */}
+            <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-white">
+                            <ServerIcon className="h-5 w-5" />
+                            <div>
+                                <h2 className="text-sm font-semibold uppercase tracking-wider">DNS Configuration for {domain}</h2>
+                                <p className="text-xs text-indigo-100 mt-0.5">Complete all steps in your DNS provider</p>
+                            </div>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={onRefresh}
+                            disabled={loadingRefresh}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white/20 backdrop-blur px-4 py-2 text-sm font-medium text-white hover:bg-white/30 disabled:opacity-50 transition-all"
+                        >
+                            <ArrowPathIcon className={`h-4 w-4 ${loadingRefresh ? 'animate-spin' : ''}`} />
+                            {loadingRefresh ? 'Verifying…' : 'Verify DNS'}
+                        </button>
                     </div>
-                    <button
-                        type="button"
-                        onClick={onRefresh}
-                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 text-sm"
-                        disabled={loadingRefresh}
-                        title="Refresh verification"
-                    >
-                        <ArrowPathIcon className={`h-4 w-4 ${loadingRefresh ? 'animate-spin' : ''}`} />
-                        {loadingRefresh ? 'Refreshing…' : 'Refresh'}
-                    </button>
                 </div>
-
-                <div className="mt-3 text-sm text-gray-700">
-                    <span className="font-medium">Last checked:</span> <span>{prettyTime(lastChecked)}</span>
+                <div className="bg-gray-50 px-6 py-3 border-t border-indigo-400/20">
+                    <div className="flex items-center justify-between text-sm">
+                        <span className="text-gray-600">Last verification check:</span>
+                        <span className="font-medium text-gray-900">{formatTime(lastChecked)}</span>
+                    </div>
                 </div>
             </div>
 
-            {/* Step 1: Verification */}
-            <StepCard
+            {/* Step 1: Domain Verification */}
+            <DnsStepCard
                 step={1}
-                title="Domain verification (TXT)"
+                title="Domain Verification"
                 status={recs?.verification_txt?.status}
-                subtitle={
-                    <>
-                        Create a TXT record exactly as shown. This confirms you control{' '}
-                        <span className="font-medium">{domain}</span>.
-                    </>
-                }
+                subtitle="Confirm domain ownership with TXT record"
+                icon={<ShieldCheckIcon className="h-5 w-5" />}
+                color="blue"
             >
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                        <thead>
-                        <tr className="text-left text-gray-500">
-                            <th className="py-2 pr-4">Type</th>
-                            <th className="py-2 pr-4">Name / Host</th>
-                            <th className="py-2 pr-4">Value</th>
-                            <th className="py-2 pr-4">TTL</th>
-                            <th className="py-2 pr-4">Priority</th>
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name / Host</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Priority</th>
                         </tr>
                         </thead>
-                        <tbody>
-                        <Row type="TXT" name={txtName} value={txtValue} />
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                        <RecordRow type="TXT" name={txtName} value={txtValue} ttl="3600" />
                         </tbody>
                     </table>
                 </div>
 
-                <DetailsBlock record={recs?.verification_txt} />
+                <VerificationDetails record={recs?.verification_txt} />
 
-                <Note>
-                    Providers label “Name/Host” differently (Host / Record name). For the root, use{' '}
-                    <strong>@</strong>. Keep TTL at <strong>1 hour</strong> (or “Auto”).
-                </Note>
-            </StepCard>
+                <InfoNote>
+                    <strong>Note:</strong> Use <code className="font-mono">@</code> for the root domain. TTL can be set to 3600
+                    seconds (1 hour) or &quot;Auto&quot; if available.
+                </InfoNote>
+            </DnsStepCard>
 
-            {/* Step 2: SPF */}
-            <StepCard
+            {/* Step 2: SPF Configuration */}
+            <DnsStepCard
                 step={2}
-                title="SPF (TXT) — authorize Monkey’s Mail to send"
+                title="SPF Authentication"
                 status={recs?.spf?.status}
-                subtitle={
-                    <>
-                        You should have <strong>one</strong> SPF TXT on the root. If you already have SPF, merge our
-                        mechanisms into it.
-                    </>
-                }
-                accent="border-emerald-200"
+                subtitle="Authorize email sending servers"
+                icon={<EnvelopeIcon className="h-5 w-5" />}
+                color="emerald"
             >
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                        <thead>
-                        <tr className="text-left text-gray-500">
-                            <th className="py-2 pr-4">Type</th>
-                            <th className="py-2 pr-4">Name / Host</th>
-                            <th className="py-2 pr-4">Value</th>
-                            <th className="py-2 pr-4">TTL</th>
-                            <th className="py-2 pr-4">Priority</th>
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name / Host</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Priority</th>
                         </tr>
                         </thead>
-                        <tbody>
-                        <Row type="TXT" name="@" value={spf} />
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                        <RecordRow type="TXT" name="@" value={spf} ttl="3600" />
                         </tbody>
                     </table>
                 </div>
 
-                <DetailsBlock record={recs?.spf} />
+                <VerificationDetails record={recs?.spf} />
 
-                <Note>
-                    Keep only one SPF TXT. Example combined value:{' '}
-                    <CodeChip>v=spf1 ip4:34.30.122.164 include:monkeysmail.com ~all</CodeChip>. If you use other
-                    senders (e.g. Google, Microsoft), keep their mechanisms in the same single record.
-                </Note>
-            </StepCard>
+                <InfoNote>
+                    <strong>Important:</strong> Only one SPF record is allowed per domain. If you have existing SPF records, merge
+                    them into a single record. Example: <code className="font-mono text-xs">v=spf1 include:monkeysmail.com include:google.com ~all</code>
+                </InfoNote>
+            </DnsStepCard>
 
-            {/* Step 3: DMARC */}
-            <StepCard
+            {/* Step 3: DMARC Policy */}
+            <DnsStepCard
                 step={3}
-                title="DMARC (TXT) — alignment & reporting"
+                title="DMARC Policy"
                 status={recs?.dmarc?.status}
-                subtitle={
-                    <>
-                        Start with <strong>p=none</strong> to monitor. After a few weeks, consider{' '}
-                        <strong>quarantine</strong> or <strong>reject</strong>.
-                    </>
-                }
-                accent="border-amber-200"
+                subtitle="Email authentication and reporting"
+                icon={<DocumentTextIcon className="h-5 w-5" />}
+                color="amber"
             >
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                        <thead>
-                        <tr className="text-left text-gray-500">
-                            <th className="py-2 pr-4">Type</th>
-                            <th className="py-2 pr-4">Name / Host</th>
-                            <th className="py-2 pr-4">Value</th>
-                            <th className="py-2 pr-4">TTL</th>
-                            <th className="py-2 pr-4">Priority</th>
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name / Host</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Priority</th>
                         </tr>
                         </thead>
-                        <tbody>
-                        <Row type="TXT" name={dmarcName} value={dmarcVal} />
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                        <RecordRow type="TXT" name={dmarcName} value={dmarcVal} ttl="3600" />
                         </tbody>
                     </table>
                 </div>
 
-                <DetailsBlock record={recs?.dmarc} />
+                <VerificationDetails record={recs?.dmarc} />
 
-                <Note>
-                    The DMARC record lives at <CodeChip>_dmarc.{domain}</CodeChip>. Reports go to the addresses in{' '}
-                    <CodeChip>rua</CodeChip> (aggregate) and <CodeChip>ruf</CodeChip> (forensic) if present.
-                </Note>
-            </StepCard>
+                <InfoNote>
+                    <strong>Recommendation:</strong> Start with <code className="font-mono">p=none</code> for monitoring. After
+                    analyzing reports, gradually move to <code className="font-mono">p=quarantine</code> or <code className="font-mono">p=reject</code> for full protection.
+                </InfoNote>
+            </DnsStepCard>
 
-            {/* Step 4: MX (optional) */}
-            <StepCard
+            {/* Step 4: MX Records */}
+            <DnsStepCard
                 step={4}
-                title="MX (optional) — only if you receive mail here"
+                title="MX Records"
                 status={recs?.mx?.status}
-                subtitle={
-                    <>
-                        Set MX to receive mail at <span className="font-medium">{domain}</span> via Monkey’s Mail. If
-                        you only <em>send</em> emails, you can skip this step.
-                    </>
-                }
-                accent="border-purple-200"
+                subtitle="Mail server configuration (optional for receiving email)"
+                icon={<EnvelopeIcon className="h-5 w-5" />}
+                color="purple"
             >
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                        <thead>
-                        <tr className="text-left text-gray-500">
-                            <th className="py-2 pr-4">Type</th>
-                            <th className="py-2 pr-4">Name / Host</th>
-                            <th className="py-2 pr-4">Value / Target</th>
-                            <th className="py-2 pr-4">TTL</th>
-                            <th className="py-2 pr-4">Priority</th>
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name / Host</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value / Target</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Priority</th>
                         </tr>
                         </thead>
-                        <tbody>
-                        {(mx ?? []).map((r, i) => (
-                            <Row
-                                key={`mx-${i}`}
-                                type="MX"
-                                name={r.host ?? '@'}
-                                value={r.value ?? 'smtp.monkeysmail.com.'}
-                                ttl="1 hour"
-                                priority={typeof r.priority === 'number' ? r.priority : 10}
-                            />
-                        ))}
-                        {(!mx || mx.length === 0) && (
-                            <Row type="MX" name="@" value="smtp.monkeysmail.com." ttl="1 hour" priority={10} />
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                        {mx.length > 0 ? (
+                            mx.map((r, i) => (
+                                <RecordRow
+                                    key={`mx-${i}`}
+                                    type="MX"
+                                    name={r.host ?? '@'}
+                                    value={r.value ?? 'smtp.monkeysmail.com'}
+                                    ttl="3600"
+                                    priority={typeof r.priority === 'number' ? r.priority : 10}
+                                />
+                            ))
+                        ) : (
+                            <RecordRow type="MX" name="@" value="smtp.monkeysmail.com" ttl="3600" priority={10} />
                         )}
                         </tbody>
                     </table>
                 </div>
 
-                <DetailsBlock record={recs?.mx} />
+                <VerificationDetails record={recs?.mx} />
 
-                <Note>
-                    Some DNS UIs require the target <em>without</em> a trailing dot. If{' '}
-                    <CodeChip>smtp.monkeysmail.com.</CodeChip> is rejected, use{' '}
-                    <CodeChip>smtp.monkeysmail.com</CodeChip>. Priority should be <strong>10</strong>.
-                </Note>
-            </StepCard>
+                <InfoNote>
+                    <strong>Note:</strong> MX records are only needed if you want to receive emails at this domain. Some providers
+                    require the trailing dot (e.g., <code className="font-mono">smtp.monkeysmail.com.</code>), while others don&apos;t.
+                </InfoNote>
+            </DnsStepCard>
 
-            {/* Step 5: DKIM */}
-            <StepCard
+            {/* Step 5: DKIM Signature */}
+            <DnsStepCard
                 step={5}
-                title="DKIM (TXT) — signing key"
+                title="DKIM Signature"
                 status={recs?.dkim?.status}
-                subtitle="Publish the DKIM public key to let mailbox providers verify your message signature."
-                accent="border-indigo-200"
+                subtitle="Email signature verification"
+                icon={<KeyIcon className="h-5 w-5" />}
+                color="indigo"
             >
-                <div className="overflow-x-auto">
-                    <table className="min-w-full text-sm">
-                        <thead>
-                        <tr className="text-left text-gray-500">
-                            <th className="py-2 pr-4">Type</th>
-                            <th className="py-2 pr-4">Name / Host</th>
-                            <th className="py-2 pr-4">Value</th>
-                            <th className="py-2 pr-4">TTL</th>
-                            <th className="py-2 pr-4">Priority</th>
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name / Host</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Priority</th>
                         </tr>
                         </thead>
-                        <tbody>
-                        <Row type="TXT" name={dkim?.name ?? ''} value={dkim?.value ?? ''} />
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                        <RecordRow type="TXT" name={dkim?.name ?? ''} value={dkim?.value ?? ''} ttl="3600" />
                         </tbody>
                     </table>
                 </div>
 
-                <DetailsBlock record={recs?.dkim} />
+                <VerificationDetails record={recs?.dkim} />
 
-                <Note>
-                    Use the exact value including the <code>v=DKIM1; k=rsa; p=...</code> part.
-                    The selector is the part before <code>._domainkey</code> in the name.
-                </Note>
-            </StepCard>
+                <InfoNote>
+                    <strong>Important:</strong> Include the complete DKIM value starting with
+                    <code className="font-mono"> v=DKIM1; k=rsa; p=…</code>. The selector is the subdomain before{' '}
+                    <code className="font-mono">._domainkey</code>.
+                </InfoNote>
+            </DnsStepCard>
 
-            <div className="text-xs text-gray-500">
-                DNS changes can take from a few minutes up to 24h to propagate. If your provider offers “Auto”
-                TTL, you can use it.
+            {/* Propagation Notice */}
+            <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
+                <div className="flex items-start gap-3">
+                    <ExclamationTriangleSolid className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <div className="text-sm text-amber-900">
+                        <strong>DNS Propagation:</strong> Changes can take anywhere from a few minutes to 48 hours to propagate
+                        globally. Most changes are visible within 1–4 hours. Click &quot;Verify DNS&quot; to check the current status of your
+                        records.
+                    </div>
+                </div>
             </div>
-        </section>
+        </div>
     );
 }
