@@ -423,7 +423,7 @@ export default function CompanyDetailPage() {
                         subtitle="Team members"
                         icon={<UserGroupIcon className="h-5 w-5" />}
                         color="emerald"
-                        link={`/dashboard/company/${hash}/users`}
+                        link={`/dashboard/company/${hash}/settings/users`}
                         linkText="Manage users"
                     />
                     <StatCard
@@ -675,7 +675,7 @@ export default function CompanyDetailPage() {
                     </Link>
 
                     <Link
-                        href={`/dashboard/company/${hash}/analytics`}
+                        href={`/dashboard/company/${hash}/usage`}
                         className="group rounded-xl bg-white shadow-sm ring-1 ring-gray-200 p-6 hover:shadow-lg hover:ring-indigo-200 transition-all"
                     >
                         <div className="flex items-center justify-between">
@@ -693,7 +693,7 @@ export default function CompanyDetailPage() {
                     </Link>
 
                     <Link
-                        href={`/dashboard/company/${hash}/settings`}
+                        href={`/dashboard/company/${hash}/settings/billing`}
                         className="group rounded-xl bg-white shadow-sm ring-1 ring-gray-200 p-6 hover:shadow-lg hover:ring-indigo-200 transition-all"
                     >
                         <div className="flex items-center justify-between">
