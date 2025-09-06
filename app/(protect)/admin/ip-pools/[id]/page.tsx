@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeftIcon, CheckIcon, TrashIcon } from '@heroicons/react/24/outline';
@@ -95,14 +95,19 @@ export default function IpPoolEditPage() {
     const { id } = useParams<{ id: string }>();
     const backend = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
 
-    const getToken = () => (typeof window !== 'undefined' ? localStorage.getItem('jwt') : null);
-    const authHeaders = (): HeadersInit => {
+    // 2) memoize getToken and authHeaders
+    const getToken = useCallback(
+        () => (typeof window !== 'undefined' ? localStorage.getItem('jwt') : null),
+        []
+    );
+
+    const authHeaders = useCallback((): HeadersInit => {
         const token = getToken();
         return {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
         };
-    };
+    }, [getToken]);
 
     const backHref = '/admin/ip-pools';
 
@@ -175,14 +180,13 @@ export default function IpPoolEditPage() {
         return () => {
             abort = true;
         };
-    }, [backend, id]);
+    }, [backend, id, authHeaders]);
 
     // Debounced company search
     useEffect(() => {
         if (!backend) return;
         const q = companyQuery.trim();
 
-        // If the visible query equals the selected id, skip searching
         if (q === '' || (companyId !== null && q === String(companyId))) {
             setCompanyResults([]);
             setCompanyErr(null);
@@ -195,7 +199,6 @@ export default function IpPoolEditPage() {
             try {
                 setCompanyLoading(true);
                 setCompanyErr(null);
-                // Use your actual route
                 const url = joinUrl(backend, `/search-companies?q=${encodeURIComponent(q)}&limit=10`);
                 const res = await fetch(url, { headers: authHeaders(), signal: ctrl.signal });
                 if (!res.ok) throw new Error(`Search failed (${res.status})`);
@@ -210,14 +213,13 @@ export default function IpPoolEditPage() {
             } finally {
                 setCompanyLoading(false);
             }
-        }, 250); // debounce
+        }, 250);
 
         return () => {
             clearTimeout(t);
             ctrl.abort();
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [backend, companyQuery]);
+    }, [backend, companyQuery, companyId, authHeaders]);
 
     const canSubmit = name.trim().length > 0;
 

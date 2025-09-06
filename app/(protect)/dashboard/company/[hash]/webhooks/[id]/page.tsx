@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 
 type WebhookRow = {
@@ -126,6 +126,45 @@ export default function EditWebhookPage() {
         []
     );
 
+    const load = useCallback(async () => {
+        try {
+            setLoading(true);
+            const res = await fetch(`${backend}/companies/${hash}/webhooks`, { headers: authHeaders() });
+            if (!res.ok) throw new Error(`Load failed (${res.status})`);
+            const list: WebhookRow[] = await res.json();
+            const found = list.find(w => w.id === Number(id));
+            if (!found) throw new Error('Webhook not found');
+
+            setUrl(found.url ?? '');
+            setStatus((found.status as 'active' | 'disabled') ?? 'disabled');
+            setBatch(found.batch_size ?? 1);
+            setRetries(found.max_retries ?? 5);
+
+            const initial = found.retry_backoff ?? 'exponential:2,60,3600';
+            setBackoffRaw(initial);
+            const parsed = parseBackoffString(initial);
+            setBackoffMode(parsed.mode);
+            setFactor(parsed.factor ?? 2);
+            setMinSec(parsed.minSec ?? 60);
+            setMaxSec(parsed.maxSec ?? 3600);
+            setFixedSec(parsed.fixedSec ?? 60);
+            setLinearBase(parsed.linearBase ?? 60);
+            setLinearStep(parsed.linearStep ?? 60);
+            setLinearMax(parsed.linearMax ?? 3600);
+            setCustomText(parsed.custom ?? 'exponential:2,60,3600');
+
+            const ev = (found.events ?? []) as string[];
+            const valid = new Set<EventKey>();
+            ev.forEach(e => { if (EVENT_OPTIONS.some(opt => opt.key === e)) valid.add(e as EventKey); });
+            setSelected(valid);
+        } catch (e) {
+            setErr(e instanceof Error ? e.message : String(e));
+        } finally {
+            setLoading(false);
+        }
+    }, [hash, id]);  // deps for load
+
+
     function toggleEvent(key: EventKey) {
         setSelected(prev => {
             const next = new Set(prev);
@@ -161,49 +200,9 @@ export default function EditWebhookPage() {
         setBackoffRaw(built);
     }, [backoffMode, factor, minSec, maxSec, fixedSec, linearBase, linearStep, linearMax, customText]);
 
-    async function load() {
-        try {
-            setLoading(true);
-            const res = await fetch(`${backend}/companies/${hash}/webhooks`, { headers: authHeaders() });
-            if (!res.ok) throw new Error(`Load failed (${res.status})`);
-            const list: WebhookRow[] = await res.json();
-            const found = list.find(w => w.id === Number(id));
-            if (!found) throw new Error('Webhook not found');
-
-            setUrl(found.url ?? '');
-            setStatus((found.status as 'active' | 'disabled') ?? 'disabled');
-            setBatch(found.batch_size ?? 1);
-            setRetries(found.max_retries ?? 5);
-
-            // hydrate backoff UI from backend value (or default)
-            const initial = found.retry_backoff ?? 'exponential:2,60,3600';
-            setBackoffRaw(initial);
-            const parsed = parseBackoffString(initial);
-            setBackoffMode(parsed.mode);
-            setFactor(parsed.factor ?? 2);
-            setMinSec(parsed.minSec ?? 60);
-            setMaxSec(parsed.maxSec ?? 3600);
-            setFixedSec(parsed.fixedSec ?? 60);
-            setLinearBase(parsed.linearBase ?? 60);
-            setLinearStep(parsed.linearStep ?? 60);
-            setLinearMax(parsed.linearMax ?? 3600);
-            setCustomText(parsed.custom ?? 'exponential:2,60,3600');
-
-            // events
-            const ev = (found.events ?? []) as string[];
-            const valid = new Set<EventKey>();
-            ev.forEach(e => {
-                if (EVENT_OPTIONS.some(opt => opt.key === e)) valid.add(e as EventKey);
-            });
-            setSelected(valid);
-        } catch (e) {
-            setErr(e instanceof Error ? e.message : String(e));
-        } finally {
-            setLoading(false);
-        }
-    }
-
-    useEffect(() => { void load(); }, [hash, id]);
+    useEffect(() => {
+        void load();
+    }, [load]);
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault();

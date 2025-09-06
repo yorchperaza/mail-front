@@ -9,7 +9,6 @@ import {
     MagnifyingGlassIcon,
     XMarkIcon,
     TrashIcon,
-    EyeIcon,
     PencilSquareIcon,
 } from '@heroicons/react/24/outline';
 
@@ -104,7 +103,6 @@ export default function PlansIndexPage() {
 
     const backHref = `/admin`;                    // adjust if needed
     const createHref = `/admin/plans/create`;     // your create page
-    const openHref   = (id: number) => `/admin/plans/${id}`;
     const editHref   = (id: number) => `/admin/plans/${id}`;
 
     const fmtMoney = (n: number | null | undefined) =>

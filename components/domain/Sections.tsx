@@ -10,9 +10,8 @@ import {
     LockClosedIcon,
     DocumentCheckIcon,
     PhotoIcon,
-    CheckCircleIcon,
     XCircleIcon,
-    ClockIcon, ChartBarIcon, ArrowRightIcon,
+    ChartBarIcon, ArrowRightIcon,
 } from '@heroicons/react/24/outline';
 import {
     ShieldCheckIcon as ShieldCheckSolid,

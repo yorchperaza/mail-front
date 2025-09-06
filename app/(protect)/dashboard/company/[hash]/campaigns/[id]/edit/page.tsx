@@ -548,10 +548,6 @@ export default function CampaignEditPage() {
     /* ------------------------------ Derived UI permissions ------------------------------ */
 
     const isCancelled = status === 'cancelled';
-    const isCompleted = status === 'completed';
-    const isSending = status === 'sending';
-    const isScheduled = status === 'scheduled';
-    const isPaused = status === 'paused';
     const isDraft = status === 'draft';
 
     // You can only trigger a new send from a draft.

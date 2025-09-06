@@ -50,8 +50,6 @@ export default function ListsIndexPage() {
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
 
-    const [newListName, setNewListName] = useState('');
-
     const [renamingId, setRenamingId] = useState<number | null>(null);
     const [renameValue, setRenameValue] = useState('');
     const [renaming, setRenaming] = useState(false);

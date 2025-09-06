@@ -11,6 +11,7 @@ import {
     UserMinusIcon,
     UserPlusIcon,
 } from '@heroicons/react/24/outline';
+import Image from 'next/image';
 
 type BackendMedia = {
     id: number;
@@ -96,47 +97,55 @@ export default function CompanyUsersPage() {
 
     const backend = process.env.NEXT_PUBLIC_BACKEND_URL as string;
 
-    const normalizeUser = (raw: BackendUser): UserItem => ({
-        id: raw.id,
-        email: raw.email,
-        name: raw.fullName ?? null,
-        image: normalizeImageUrl(backend, raw.media),
-        roles: Array.isArray(raw.roles) ? raw.roles : [],
-    });
+// 2) memoize normalizeUser (it depends on `backend`)
+    const normalizeUser = useCallback(
+        (raw: BackendUser): UserItem => ({
+            id: raw.id,
+            email: raw.email,
+            name: raw.fullName ?? null,
+            image: normalizeImageUrl(backend, raw.media),
+            roles: Array.isArray(raw.roles) ? raw.roles : [],
+        }),
+        [backend]
+    );
 
-    const loadUsers = useCallback(async (targetPage: number) => {
-        if (!companyHash) return;
-        setLoading(true);
-        setError(null);
+// 3) include normalizeUser in loadUsers deps
+    const loadUsers = useCallback(
+        async (targetPage: number) => {
+            if (!companyHash) return;
+            setLoading(true);
+            setError(null);
 
-        try {
-            const url = new URL(`${backend}/companies/${companyHash}/users`);
-            url.searchParams.set('page', String(targetPage));
-            url.searchParams.set('per_page', String(perPage));
+            try {
+                const url = new URL(`${backend}/companies/${companyHash}/users`);
+                url.searchParams.set('page', String(targetPage));
+                url.searchParams.set('per_page', String(perPage));
 
-            const res = await fetch(url.toString(), { headers: authHeaders() });
-            if (res.status === 403 || res.status === 401) {
-                setError('You do not have access to this company.');
+                const res = await fetch(url.toString(), { headers: authHeaders() });
+                if (res.status === 403 || res.status === 401) {
+                    setError('You do not have access to this company.');
+                    setUsers([]);
+                    setTotal(0);
+                    return;
+                }
+                if (!res.ok) throw new Error(`Failed to load users: ${res.status}`);
+
+                const payload = (await res.json()) as PagedResponse<BackendUser>;
+                const normalized = (payload.data ?? []).map(normalizeUser);
+
+                setUsers(normalized);
+                setPage(payload.page ?? targetPage);
+                setTotal(payload.total ?? normalized.length);
+            } catch (e) {
+                setError(e instanceof Error ? e.message : 'Failed to load users');
                 setUsers([]);
                 setTotal(0);
-                return;
+            } finally {
+                setLoading(false);
             }
-            if (!res.ok) throw new Error(`Failed to load users: ${res.status}`);
-
-            const payload = (await res.json()) as PagedResponse<BackendUser>;
-            const normalized = (payload.data ?? []).map(normalizeUser);
-
-            setUsers(normalized);
-            setPage(payload.page ?? targetPage);
-            setTotal(payload.total ?? normalized.length);
-        } catch (e) {
-            setError(e instanceof Error ? e.message : 'Failed to load users');
-            setUsers([]);
-            setTotal(0);
-        } finally {
-            setLoading(false);
-        }
-    }, [backend, companyHash, perPage]);
+        },
+        [backend, companyHash, perPage, normalizeUser]
+    );
 
     useEffect(() => {
         if (!companyHash) return;
@@ -155,7 +164,11 @@ export default function CompanyUsersPage() {
     const toggleRole = (userId: number, role: string) => {
         setDraftRoles((prev) => {
             const current = new Set(prev[userId] ?? []);
-            current.has(role) ? current.delete(role) : current.add(role);
+            if (current.has(role)) {
+                current.delete(role);
+            } else {
+                current.add(role);
+            }
             return { ...prev, [userId]: Array.from(current) };
         });
     };
@@ -203,13 +216,6 @@ export default function CompanyUsersPage() {
             setBusyUserId(null);
         }
     };
-
-    const totalPages = Math.max(1, Math.ceil(total / perPage));
-    const canPrev = page > 1;
-    const canNext = page < totalPages;
-
-    const gotoPrev = () => canPrev && loadUsers(page - 1);
-    const gotoNext = () => canNext && loadUsers(page + 1);
 
     if (!companyHash) {
         return (
@@ -277,18 +283,20 @@ export default function CompanyUsersPage() {
                         const isEditing = editingId === u.id;
                         const currentRoles = isEditing ? (draftRoles[u.id] ?? []) : u.roles;
 
-                        const avatar =
-                            u.image ?? `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(u.name ?? u.email)}`;
-
                         return (
                             <div key={u.id} className="p-4">
                                 <div className="flex items-start justify-between">
                                     {/* Left: avatar + identity */}
                                     <div className="flex items-center gap-4 min-w-0">
-                                        <img
-                                            src={avatar}
+                                        <Image
+                                            src={
+                                                u.image ??
+                                                `https://api.dicebear.com/9.x/initials/svg?seed=${encodeURIComponent(u.name ?? u.email)}`
+                                            }
                                             alt={u.name ?? u.email}
-                                            className="h-12 w-12 rounded-full object-cover bg-gray-100"
+                                            width={48}
+                                            height={48}
+                                            className="rounded-full object-cover bg-gray-100"
                                         />
                                         <div className="min-w-0">
                                             <div className="font-medium text-gray-900 truncate">{u.name ?? '—'}</div>

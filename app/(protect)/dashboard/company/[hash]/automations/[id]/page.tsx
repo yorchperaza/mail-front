@@ -20,8 +20,7 @@ import type { ReactCodeMirrorProps } from '@uiw/react-codemirror';
 /* -------------------- Lazy CodeMirror (no SSR) -------------------- */
 let CodeMirror: React.ComponentType<ReactCodeMirrorProps> | null = null;
 if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    import('@uiw/react-codemirror').then((m) => {
+    void import('@uiw/react-codemirror').then((m) => {
         CodeMirror = m.default as React.ComponentType<ReactCodeMirrorProps>;
     });
 }
@@ -39,6 +38,17 @@ type Automation = {
 };
 
 type TriggerKind = 'time' | 'webhook' | 'event';
+type FlowTrigger = { type?: TriggerKind; cron?: string; secret?: string; name?: string };
+type FlowShape = { trigger?: FlowTrigger; steps?: unknown };
+
+// Narrowing helper
+function getTriggerKindFromFlow(flow: unknown): TriggerKind | null {
+    if (!flow || typeof flow !== 'object') return null;
+    const trg = (flow as FlowShape).trigger;
+    const t = trg?.type;
+    return t === 'time' || t === 'webhook' || t === 'event' ? t : null;
+}
+
 type PostBody = {
     name?: string | null;
     trigger?: string | null;
@@ -131,10 +141,8 @@ export default function AutomationEditPage() {
                 if (abort) return;
                 setName(a.name ?? '');
                 // prefer explicit trigger, else infer from flow.trigger.type
-                const t = (a.trigger as TriggerKind | null) ??
-                    (typeof a.flow?.trigger === 'object' && a.flow?.trigger && typeof (a.flow!.trigger as any).type === 'string'
-                        ? ((a.flow!.trigger as any).type as TriggerKind)
-                        : 'time');
+                const inferred = getTriggerKindFromFlow(a.flow);
+                const t: TriggerKind = (a.trigger as TriggerKind | null) ?? inferred ?? 'time';
                 setTrigger(t);
 
                 const flow = a.flow ?? defaultFlow(t);
@@ -142,7 +150,7 @@ export default function AutomationEditPage() {
                 setFlowJSON(JSON.stringify(flow, null, 2));
                 setFlowErr(null);
 
-                setStatus((a.status ?? 'draft') as typeof status);
+                setStatus((a.status ?? 'draft') as 'draft' | 'active' | 'paused' | 'disabled');
                 setCreatedAt(a.created_at);
                 setLastRunAt(a.last_run_at);
             } catch (e) {
@@ -395,7 +403,11 @@ export default function AutomationEditPage() {
                     <ExclamationTriangleIcon className="h-4 w-4" />
                     {trigger === 'time' && <span>Use a standard CRON string in <code>flow.trigger.cron</code> (e.g. <code>0 9 * * *</code> for daily 09:00).</span>}
                     {trigger === 'webhook' && <span>Provide a strong <code>flow.trigger.secret</code>; you’ll receive a URL elsewhere after enabling.</span>}
-                    {trigger === 'event' && <span>Set <code>flow.trigger.name</code> to an internal event (e.g. <code>"contact.created"</code>).</span>}
+                    {trigger === 'event' && (
+                        <span>
+                            Set <code>flow.trigger.name</code> to an internal event (e.g. <code>&quot;contact.created&quot;</code>).
+                        </span>
+                    )}
                 </div>
             </div>
 

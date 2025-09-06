@@ -16,8 +16,7 @@ import type { ReactCodeMirrorProps } from '@uiw/react-codemirror';
 /* -------------------- Lazy CodeMirror (no SSR) -------------------- */
 let CodeMirror: React.ComponentType<ReactCodeMirrorProps> | null = null;
 if (typeof window !== 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
-    import('@uiw/react-codemirror').then((m) => {
+    void import('@uiw/react-codemirror').then((m) => {
         CodeMirror = m.default as React.ComponentType<ReactCodeMirrorProps>;
     });
 }
@@ -290,7 +289,11 @@ export default function AutomationCreatePage() {
                     <ExclamationTriangleIcon className="h-4 w-4" />
                     {trigger === 'time' && <span>Use a standard CRON string in <code>flow.trigger.cron</code> (e.g. <code>0 9 * * *</code> for daily 09:00).</span>}
                     {trigger === 'webhook' && <span>Provide a strong <code>flow.trigger.secret</code>; you’ll receive a URL after creating.</span>}
-                    {trigger === 'event' && <span>Set <code>flow.trigger.name</code> to an internal event (e.g. <code>"contact.created"</code>).</span>}
+                    {trigger === 'event' && (
+                        <span>
+                            Set <code>flow.trigger.name</code> to an internal event (e.g. <code>&quot;contact.created&quot;</code>).
+                        </span>
+                    )}
                 </div>
             </div>
 

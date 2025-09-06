@@ -14,7 +14,6 @@ import {
     Cog6ToothIcon,
     KeyIcon,
     CreditCardIcon,
-    FolderIcon,
     LinkIcon,
     RectangleStackIcon,
 } from '@heroicons/react/24/outline';

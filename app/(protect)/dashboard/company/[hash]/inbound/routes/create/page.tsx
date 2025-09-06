@@ -1,11 +1,10 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
     ArrowLeftIcon,
-    CheckIcon,
     InformationCircleIcon,
 } from '@heroicons/react/24/outline';
 
@@ -19,6 +18,18 @@ type ExpressionType = 'match_header' | 'match_recipient' | 'match_sender' | 'cat
 type Destination =
     | { type: 'forward'; to: string[]; meta?: { priority?: number; description?: string } }
     | { type: 'store';   notify: string[]; meta?: { priority?: number; description?: string } };
+
+type RouteAction = 'forward' | 'store' | 'stop';
+
+type CreateRoutePayload = {
+    pattern: string;
+    action: RouteAction;
+    domainId: number | null;
+    dkim_required: 0 | 1;
+    tls_required: 0 | 1;
+    spam_threshold?: number;
+    destination?: Destination;
+};
 
 /* ----------------------------- Helpers ----------------------------- */
 
@@ -61,6 +72,28 @@ function buildPattern(
     }
 }
 
+function parseDomainBriefs(raw: unknown): DomainBrief[] {
+    if (!Array.isArray(raw)) return [];
+    return raw
+        .map((v): DomainBrief | null => {
+            if (typeof v !== 'object' || v === null) return null;
+            // id
+            const idRaw = (v as { id?: unknown }).id;
+            const id =
+                typeof idRaw === 'number'
+                    ? idRaw
+                    : typeof idRaw === 'string' && !Number.isNaN(Number(idRaw))
+                        ? Number(idRaw)
+                        : null;
+            if (id === null) return null;
+            // domain
+            const domainRaw = (v as { domain?: unknown }).domain;
+            const domain = typeof domainRaw === 'string' ? domainRaw : null;
+            return { id, domain };
+        })
+        .filter((x): x is DomainBrief => x !== null);
+}
+
 /* ----------------------------- Page ----------------------------- */
 
 export default function InboundRouteCreateLikeMailgunPage() {
@@ -98,8 +131,8 @@ export default function InboundRouteCreateLikeMailgunPage() {
             try {
                 const dRes = await fetch(joinUrl(backend, `/companies/${hash}/domains`), { headers: authHeaders() });
                 if (dRes.ok) {
-                    const list: any[] = await dRes.json();
-                    const norm: DomainBrief[] = list.map(d => ({ id: d.id, domain: d.domain ?? null }));
+                    const raw: unknown = await dRes.json();
+                    const norm = parseDomainBriefs(raw);
                     if (!abort) setDomains(norm);
                 } else {
                     if (!abort) setDomains([]);
@@ -247,12 +280,12 @@ export default function InboundRouteCreateLikeMailgunPage() {
             };
         }
 
-        const payload: any = {
+        const payload: CreateRoutePayload = {
             pattern,
             action: primary, // 'forward' | 'store' | 'stop'
             domainId: domainId === '' ? null : Number(domainId),
-            dkim_required: dkimRequired ? 1 : 0,
-            tls_required: tlsRequired ? 1 : 0,
+            dkim_required: dkimRequired ? 1 as const : 0 as const,
+            tls_required: tlsRequired ? 1 as const : 0 as const,
             destination,
         };
         if (spamThreshold.trim() !== '') payload.spam_threshold = Number(spamThreshold);

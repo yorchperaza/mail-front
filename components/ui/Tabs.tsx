@@ -37,7 +37,7 @@ export default function Tabs({ tabs, activeId, onChange, linkForId, className }:
                                 <Link
                                     key={t.id}
                                     href={href}
-                                    onClick={(e) => {
+                                    onClick={() => {
                                         // Let Next.js handle the client-side nav, but still sync local state
                                         // so panels switch instantly without waiting for URL state effect.
                                         onChange(t.id);

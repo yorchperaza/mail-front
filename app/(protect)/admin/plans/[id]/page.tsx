@@ -211,7 +211,6 @@ export default function PlanEditPage() {
                 setLoading(false);
             }
         })();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [backend, id]);
 
     // Build features for PATCH from controlled inputs

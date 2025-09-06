@@ -12,28 +12,17 @@ import {
     MagnifyingGlassIcon,
     XMarkIcon,
     UserGroupIcon,
-    EnvelopeIcon,
     ShieldCheckIcon,
     CalendarIcon,
     ArrowDownTrayIcon,
     FunnelIcon,
     CheckCircleIcon,
-    ClockIcon,
-    UserIcon,
-    DocumentCheckIcon,
-    ChartBarIcon,
-    ArrowRightIcon,
     TableCellsIcon,
     Squares2X2Icon,
-    DocumentDuplicateIcon,
-    CheckIcon,
     ExclamationTriangleIcon,
 } from '@heroicons/react/24/outline';
 import {
-    UserGroupIcon as UserGroupSolid,
     CheckCircleIcon as CheckCircleSolid,
-    ClockIcon as ClockSolid,
-    ShieldCheckIcon as ShieldCheckSolid,
 } from '@heroicons/react/24/solid';
 
 type ContactItem = {
@@ -220,7 +209,6 @@ export default function ContactsListPage() {
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<number | null>(null);
-    const [listCounts, setListCounts] = useState<Record<number, number>>({});
 
     const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -455,7 +443,7 @@ export default function ContactsListPage() {
                             </div>
                             {qFromUrl && (
                                 <span className="text-xs text-purple-100">
-                                    Showing results for "{qFromUrl}"
+                                    Showing results for &quot;{qFromUrl}&quot;
                                 </span>
                             )}
                         </div>

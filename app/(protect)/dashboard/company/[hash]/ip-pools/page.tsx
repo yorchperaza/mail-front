@@ -43,10 +43,10 @@ export default function CompanyIpPoolsPage() {
     const { hash } = useParams<{ hash: string }>();
 
     const backend = process.env.NEXT_PUBLIC_BACKEND_URL ?? '';
-    const authHeaders = (): HeadersInit => {
+    const authHeaders = React.useCallback((): HeadersInit => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('jwt') : null;
         return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-    };
+    }, []);
 
     // company
     const [company, setCompany] = useState<Company | null>(null);
@@ -71,15 +71,13 @@ export default function CompanyIpPoolsPage() {
     const [urgency, setUrgency] = useState<Urgency>('normal');
     const [notes, setNotes] = useState('');
 
-    const authz = authHeaders();
-
     // your existing listing route (company scoped)
     const listUrl = useMemo(() => {
         const sp = new URLSearchParams({ page: '1', perPage: '50' });
         return `${backend}/ippools-companies/${hash}?${sp.toString()}`;
     }, [backend, hash]);
 
-    // load company
+// load company
     useEffect(() => {
         if (!backend || !hash) return;
         let abort = false;
@@ -87,7 +85,7 @@ export default function CompanyIpPoolsPage() {
         (async () => {
             try {
                 const url = joinUrl(backend, `/companies/${hash}`);
-                const res = await fetch(url, { headers: authz });
+                const res = await fetch(url, { headers: authHeaders() });
                 if (!res.ok) throw new Error(`Failed to load company (${res.status})`);
                 const c: Company = await res.json();
                 if (!abort) setCompany(c);
@@ -97,9 +95,9 @@ export default function CompanyIpPoolsPage() {
         })();
 
         return () => { abort = true; };
-    }, [backend, hash]);
+    }, [backend, hash, authHeaders]);
 
-    // load pools
+// load pools
     useEffect(() => {
         if (!backend || !hash) return;
         let abort = false;
@@ -108,7 +106,7 @@ export default function CompanyIpPoolsPage() {
             setLoading(true);
             setError(null);
             try {
-                const res = await fetch(listUrl, { headers: authz });
+                const res = await fetch(listUrl, { headers: authHeaders() });
                 if (res.status === 403) {
                     setError('You don’t have access to this company’s IP pools.');
                     return;
@@ -124,7 +122,8 @@ export default function CompanyIpPoolsPage() {
         })();
 
         return () => { abort = true; };
-    }, [listUrl, backend, hash]);
+    }, [listUrl, backend, hash, authHeaders]);
+
 
     const backHref = `/dashboard/company/${hash}`;
     const showHref = (id: number) => `/dashboard/company/${hash}/ip-pools/${id}`;
@@ -207,7 +206,7 @@ export default function CompanyIpPoolsPage() {
         try {
             const res = await fetch(requestUrl, {
                 method: 'POST',
-                headers: authz,
+                headers: authHeaders(),
                 body: JSON.stringify(payload),
             });
             if (!res.ok) {

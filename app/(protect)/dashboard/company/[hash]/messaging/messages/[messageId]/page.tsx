@@ -9,7 +9,6 @@ import {
     ClipboardIcon,
     CheckCircleIcon,
     GlobeAltIcon,
-    EnvelopeOpenIcon,
     ClockIcon,
     PaperClipIcon,
     CodeBracketIcon,
@@ -19,7 +18,6 @@ import {
     XMarkIcon,
     ExclamationTriangleIcon,
     ArrowPathIcon,
-    PaperAirplaneIcon,
     EyeIcon,
     CursorArrowRaysIcon,
     CalendarIcon,
@@ -28,7 +26,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { EnvelopeIcon as EnvelopeSolid } from '@heroicons/react/24/solid';
 
-import Tabs, { TabDef } from '@/components/ui/Tabs';
+import { TabDef } from '@/components/ui/Tabs';
 
 /* ========================= Types ========================= */
 type Detail = {

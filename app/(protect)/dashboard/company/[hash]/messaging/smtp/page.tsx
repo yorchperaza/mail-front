@@ -6,7 +6,6 @@ import { useParams, useRouter } from 'next/navigation';
 import {
     ArrowLeftIcon,
     ArrowPathIcon,
-    PlusIcon,
     TrashIcon,
     KeyIcon,
     ClipboardIcon,

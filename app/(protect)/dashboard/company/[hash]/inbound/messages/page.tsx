@@ -266,30 +266,6 @@ export default function InboundMessagesListPage() {
         return arr;
     }, [data]);
 
-    // Simple SVG line chart
-    const chartW = 800;
-    const chartH = 160;
-    const pad = 24;
-
-    const counts = chartPoints.map(p => p.count);
-    const maxV = counts.length ? Math.max(...counts) : 0;
-    const minV = 0;
-
-    const xScale = (i: number) =>
-        pad + (chartPoints.length <= 1 ? 0 : (i * (chartW - 2 * pad)) / (chartPoints.length - 1));
-    const yScale = (v: number) => {
-        if (maxV === minV) return chartH - pad;
-        const t = (v - minV) / (maxV - minV);
-        return chartH - pad - t * (chartH - 2 * pad);
-    };
-
-    const linePath = (() => {
-        if (chartPoints.length === 0) return '';
-        return chartPoints
-            .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(i).toFixed(1)} ${yScale(p.count).toFixed(1)}`)
-            .join(' ');
-    })();
-
     /* ----------------------------- Render ----------------------------- */
 
     if (loading) return <p className="p-6 text-center text-gray-600">Loading inbound messages…</p>;

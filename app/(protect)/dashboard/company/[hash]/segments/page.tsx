@@ -253,9 +253,13 @@ export default function SegmentsListPage() {
 
     // clean up timers on unmount
     useEffect(() => {
+        // snapshot current ref values at effect setup time
+        const timersAtMount = pollTimers.current;
+        const toastAtMount = toastTimer.current;
+
         return () => {
-            Object.values(pollTimers.current).forEach((h) => window.clearInterval(h));
-            if (toastTimer.current) window.clearTimeout(toastTimer.current);
+            Object.values(timersAtMount).forEach((h) => window.clearInterval(h));
+            if (toastAtMount) window.clearTimeout(toastAtMount);
         };
     }, []);
 

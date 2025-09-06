@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, usePathname, useRouter, useSearchParams } from 'next/navigation';
-import Link from 'next/link';
 import {
     ArrowLeftIcon,
     FunnelIcon,
@@ -13,7 +12,6 @@ import {
     CheckCircleIcon,
     XCircleIcon,
     ExclamationTriangleIcon,
-    PaperAirplaneIcon,
     EyeIcon,
     ArrowPathIcon,
     DocumentDuplicateIcon,
@@ -22,11 +20,7 @@ import {
     ChevronDownIcon,
     ChevronUpIcon,
     AdjustmentsHorizontalIcon,
-    ArrowDownTrayIcon,
-    ArrowUpTrayIcon,
-    SparklesIcon,
     InboxIcon,
-    CursorArrowRaysIcon,
     UserGroupIcon,
 } from '@heroicons/react/24/outline';
 import {
@@ -39,8 +33,6 @@ import {
 /* Recharts */
 import {
     ResponsiveContainer,
-    LineChart,
-    Line,
     AreaChart,
     Area,
     XAxis,
@@ -325,8 +317,6 @@ export default function CompanyMessagesPage() {
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
     const [domains, setDomains] = useState<DomainItem[]>([]);
-    const [domainsLoading, setDomainsLoading] = useState(true);
-    const [domainsErr, setDomainsErr] = useState<string | null>(null);
     const [showAdvanced, setShowAdvanced] = useState(false);
     const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
 
@@ -392,8 +382,6 @@ export default function CompanyMessagesPage() {
     useEffect(() => {
         let abort = false;
         (async () => {
-            setDomainsLoading(true);
-            setDomainsErr(null);
             try {
                 const res = await fetch(domainsUrl, {
                     headers: {
@@ -405,9 +393,9 @@ export default function CompanyMessagesPage() {
                 const json: DomainItem[] = await res.json();
                 if (!abort) setDomains(json);
             } catch (e) {
-                if (!abort) setDomainsErr(e instanceof Error ? e.message : String(e));
+                if (!abort) console.error(e);
             } finally {
-                if (!abort) setDomainsLoading(false);
+                if (!abort) setLoading(false);
             }
         })();
         return () => { abort = true; };

@@ -1,13 +1,23 @@
 "use client";
 
 import type { CSSProperties } from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 
 type BrandStyle = CSSProperties & { ["--ml-primary"]?: string };
 
+// ----- Wrapper that provides the Suspense boundary -----
 export default function LoginPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-neutral-500">Loading…</div>}>
+            <LoginContent />
+        </Suspense>
+    );
+}
+
+// ----- Your original component logic moved here -----
+function LoginContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -20,7 +30,10 @@ export default function LoginPage() {
     const [error, setError] = useState<string | null>(null);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
-    const justRegistered = useMemo(() => searchParams?.get("registered") === "1", [searchParams]);
+    const justRegistered = useMemo(
+        () => searchParams?.get("registered") === "1",
+        [searchParams]
+    );
     const brandStyle: BrandStyle = { "--ml-primary": "#ea8a0a" };
 
     function validate(): boolean {

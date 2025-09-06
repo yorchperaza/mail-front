@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -55,10 +55,10 @@ export default function CampaignDetailPage() {
     const { hash, id } = useParams<{ hash: string; id: string }>();
 
     const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
-    const authHeaders = (): HeadersInit => {
+    const authHeaders = useCallback<() => HeadersInit>(() => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('jwt') : null;
         return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-    };
+    }, []);
 
     // Pager for recipients
     const page = Math.max(1, parseInt(search.get('page') || '1', 10) || 1);
@@ -102,7 +102,7 @@ export default function CampaignDetailPage() {
     const [lists, setLists] = useState<Record<number, ListSummary>>({});
     const [segments, setSegments] = useState<Record<number, SegmentSummary>>({});
 
-    const loadLookups = async () => {
+    const loadLookups = useCallback(async () => {
         if (!backend) return;
         try {
             const [dRes, tRes, lRes, sRes] = await Promise.all([
@@ -130,7 +130,7 @@ export default function CampaignDetailPage() {
         } catch {
             /* silent */
         }
-    };
+    }, [backend, hash, authHeaders]);
 
     // Fetch campaign + stats + lookups
     useEffect(() => {
@@ -159,11 +159,11 @@ export default function CampaignDetailPage() {
         return () => {
             abort = true;
         };
-    }, [campaignUrl, statsUrl]);
+    }, [authHeaders, campaignUrl, statsUrl]);
 
     useEffect(() => {
-        loadLookups();
-    }, [backend, hash]);
+        loadLookups()
+    }, [loadLookups]);
 
     // Fetch recipients
     useEffect(() => {
@@ -176,7 +176,7 @@ export default function CampaignDetailPage() {
                 if (!res.ok) throw new Error(`Recipients failed (${res.status})`);
                 const json: RecipientsPage = await res.json();
                 if (!abort) setRecips(json);
-            } catch (e) {
+            } catch {
                 if (!abort)
                     setRecips({ meta: { page: 1, perPage, total: 0, totalPages: 0 }, items: [] });
             } finally {
@@ -186,7 +186,7 @@ export default function CampaignDetailPage() {
         return () => {
             abort = true;
         };
-    }, [recipientsUrl, backend, perPage]);
+    }, [recipientsUrl, backend, perPage, authHeaders]);
 
     function updateQuery(partial: Record<string, unknown>) {
         const sp = new URLSearchParams(search.toString());

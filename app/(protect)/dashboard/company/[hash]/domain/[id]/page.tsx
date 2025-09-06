@@ -28,11 +28,9 @@ import {
 } from '@heroicons/react/24/solid';
 import { Menu, Transition } from '@headlessui/react';
 
-import { StatusBadge } from '@/components/domain/Status';
 import ConfirmDeleteDomainModal from '@/components/domain/DeleteDomainModal';
 import type { DomainDetail } from '@/types/domain';
 
-import Tabs from '@/components/ui/Tabs';
 import GeneralInfoTab from '@/components/domain/tabs/GeneralInfoTab';
 import RecordsTab from '@/components/domain/tabs/RecordsTab';
 import KeysTab from '@/components/domain/tabs/KeysTab';
@@ -231,13 +229,6 @@ export default function DomainDetailPage() {
         }
     }
 
-    const tabHref = (id: string) => {
-        const tabId = id as TabId;
-        const params = new URLSearchParams(searchParams.toString());
-        params.set('tab', tabId);
-        return `${pathname}?${params.toString()}`;
-    };
-
     function onTabChange(id: string) {
         const params = new URLSearchParams(searchParams.toString());
         params.set('tab', id);
@@ -291,8 +282,14 @@ export default function DomainDetailPage() {
     const safeStatus: DomainStatus = normalizeStatus(status);
 
     // Calculate stats
+    const toNum = (v: unknown) =>
+        typeof v === 'number' ? v : typeof v === 'string' ? Number(v) || 0 : 0;
+
     const totalRecords =
-        (counts?.records || 0) + (counts?.mx || 0) + (counts?.txt || 0) + (counts?.cname || 0);
+        toNum(counts?.records) +
+        toNum(counts?.mx) +
+        toNum(counts?.txt) +
+        toNum(counts?.cname);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">

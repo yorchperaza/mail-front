@@ -25,7 +25,6 @@ type CompanyCard = {
 };
 
 type Me = { id: number; email: string; fullName?: string | null };
-type MeRedirect = { redirectTo: string };
 
 /* ----------------------------- Utils ----------------------------- */
 

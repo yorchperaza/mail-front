@@ -18,7 +18,6 @@ import {
     FiClock,
     FiTrendingUp,
     FiArrowRight,
-    FiCheck,
     FiEye,
     FiEyeOff,
     FiInbox,
@@ -185,7 +184,11 @@ export default function MonkeysMailLanding() {
 
     // Brand color
     const brandColor = '#ea8a0a';
-    const brandStyle = { ['--ml-primary' as any]: brandColor } as React.CSSProperties;
+    type CSSVarPrimary = { ['--ml-primary']: string };
+
+    const brandStyle: React.CSSProperties & CSSVarPrimary = {
+        ['--ml-primary']: brandColor,
+    };
 
     // Plans state (dynamic)
     const [brief, setBrief] = useState<PlanBrief[]>([]);

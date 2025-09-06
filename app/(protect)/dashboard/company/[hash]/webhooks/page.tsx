@@ -1,6 +1,6 @@
 'use client';
 
-import React, { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Fragment, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Popover, Transition, Listbox } from '@headlessui/react';
@@ -89,7 +89,11 @@ const MultiSelectEvents: React.FC<{
 
     function toggle(k: EventKey) {
         const next = new Set(selectedSet);
-        next.has(k) ? next.delete(k) : next.add(k);
+        if (next.has(k)) {
+            next.delete(k);
+        } else {
+            next.add(k);
+        }
         onChange(Array.from(next));
     }
     function selectAll() {
@@ -254,7 +258,7 @@ export default function CompanyWebhooksListPage() {
 
     const [busyId, setBusyId] = useState<number | null>(null);
 
-    async function load() {
+    const load = React.useCallback(async () => {
         try {
             setLoading(true);
             setErr(null);
@@ -267,9 +271,9 @@ export default function CompanyWebhooksListPage() {
         } finally {
             setLoading(false);
         }
-    }
+    }, [hash]);
 
-    useEffect(() => { void load(); }, [hash]);
+    useEffect(() => { void load(); }, [load]);
 
     const filtered = useMemo(() => {
         return rows.filter(r => {

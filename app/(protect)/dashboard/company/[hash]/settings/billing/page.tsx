@@ -19,8 +19,6 @@ import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-
 
 /* ------------------------------- Types -------------------------------- */
 
-type ApiError = { message?: string } & Record<string, unknown>;
-
 type PlanBrief = { id: number; name: string };
 
 /** Strongly-typed optional sections we expect inside features objects. */
@@ -244,7 +242,6 @@ export default function CompanyBillingPage() {
     const [details, setDetails] = useState<Record<number, PlanDetail>>({});
     const [selectedPlanId, setSelectedPlanId] = useState<number | null>(null);
     const [plansLoading, setPlansLoading] = useState(false);
-    const [plansError, setPlansError] = useState<string | null>(null);
 
     // ui & errors
     const [error, setError] = useState<string | null>(null);
@@ -325,7 +322,6 @@ export default function CompanyBillingPage() {
         (async () => {
             try {
                 setPlansLoading(true);
-                setPlansError(null);
 
                 const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/plans-brief`, {
                     headers: { 'Content-Type': 'application/json' },
@@ -352,7 +348,7 @@ export default function CompanyBillingPage() {
                 if (cancelled) return;
                 setDetails(Object.fromEntries(pairs));
             } catch (e) {
-                if (!cancelled) setPlansError(e instanceof Error ? e.message : 'Failed to load plans.');
+                if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load plans.');
             } finally {
                 if (!cancelled) setPlansLoading(false);
             }

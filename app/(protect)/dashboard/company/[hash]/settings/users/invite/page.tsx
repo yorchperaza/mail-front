@@ -109,7 +109,13 @@ export default function CompanyInvitePage() {
     const toggleRole = (role: string) => {
         setSelectedRoles((prev) => {
             const set = new Set(prev);
-            set.has(role) ? set.delete(role) : set.add(role);
+
+            if (set.has(role)) {
+                set.delete(role);
+            } else {
+                set.add(role);
+            }
+
             const out = Array.from(set);
             return out.length ? out : ['member'];
         });
@@ -161,7 +167,6 @@ export default function CompanyInvitePage() {
                         return { email, status: 'needs_invite', preview: payload.preview };
 
                     default: {
-                        const _exhaustiveCheck: never = payload;
                         return { email, status: 'error', message: 'Unexpected response' };
                     }
                 }
@@ -187,11 +192,9 @@ export default function CompanyInvitePage() {
 
         const out: InviteResult[] = [];
         for (const e of emails) {
-            /* eslint-disable no-await-in-loop */
             const r = await inviteOne(e);
             out.push(r);
             setResults([...out]); // progressive update
-            /* eslint-enable no-await-in-loop */
         }
         setSubmitting(false);
     };
