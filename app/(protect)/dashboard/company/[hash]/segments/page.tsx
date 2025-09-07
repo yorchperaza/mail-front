@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -61,12 +61,6 @@ type SyncRunResponse = {
 type ApiListResponse<T> = {
     meta: { page: number; perPage: number; total: number; totalPages: number };
     items: T[];
-};
-
-type EnqueueResponse = {
-    status: 'enqueued';
-    entryId: string;
-    segment: { id: number; name: string | null };
 };
 
 type StatusPayload = {
@@ -362,14 +356,79 @@ export default function SegmentsListPage() {
     const [statusMap, setStatusMap] = useState<Record<number, StatusPayload>>({});
 
     const pollTimers = useRef<Record<number, number>>({});
-    const toastTimer = useRef<number | null>(null);
 
     const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
 
-    const authHeaders = (): HeadersInit => {
+    const authHeaders = useCallback((): HeadersInit => {
         const token = typeof window !== 'undefined' ? localStorage.getItem('jwt') : null;
         return { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) };
-    };
+    }, []);
+
+    const toastTimer = useRef<number | null>(null);
+    const showToast = useCallback((kind: 'info'|'success'|'error', text: string, ms = 3000) => {
+        setToast({ kind, text });
+        if (toastTimer.current) window.clearTimeout(toastTimer.current);
+        toastTimer.current = window.setTimeout(() => setToast(null), ms);
+    }, []);
+
+    const fetchStatusOnce = useCallback(async (segmentId: number) => {
+        try {
+            const res = await fetch(`${backend}/companies/${hash}/segments/${segmentId}/builds/status`, {
+                headers: authHeaders(),
+            });
+            if (!res.ok) throw new Error(String(res.status));
+            const json = (await res.json()) as BackendStatus;
+
+            const payload: StatusPayload = {
+                status: (json.status as StatusPayload['status']) ?? 'unknown',
+                message: json.message ?? null,
+                updatedAt: json.updatedAt ?? null,
+                entryId: json.entryId ?? null,
+                progress: typeof json.progress === 'number' ? json.progress : null,
+            };
+
+            setStatusMap(prev => ({ ...prev, [segmentId]: payload }));
+
+            // If active, ensure a single polling interval is running
+            if (payload.status === 'queued' || payload.status === 'running') {
+                if (!pollTimers.current[segmentId]) {
+                    pollTimers.current[segmentId] = window.setInterval(() => fetchStatusOnce(segmentId), 2500);
+                }
+                return;
+            }
+
+            // Terminal states: stop polling and update row meta with server time if provided
+            if (payload.status === 'ok' || payload.status === 'error') {
+                if (pollTimers.current[segmentId]) {
+                    window.clearInterval(pollTimers.current[segmentId]);
+                    delete pollTimers.current[segmentId];
+                }
+                setData(prev =>
+                    prev
+                        ? {
+                            ...prev,
+                            items: prev.items.map(s =>
+                                s.id === segmentId
+                                    ? { ...s, last_built_at: payload.updatedAt ?? s.last_built_at }
+                                    : s
+                            ),
+                        }
+                        : prev
+                );
+                showToast(payload.status === 'ok' ? 'success' : 'error',
+                    payload.status === 'ok' ? 'Segment built successfully' : 'Build failed');
+            }
+        } catch {
+            // keep previous status on errors
+        }
+    }, [backend, hash, authHeaders, showToast]);
+
+    const startPolling = useCallback((segmentId: number, ms = 2500) => {
+        if (pollTimers.current[segmentId]) return;
+        pollTimers.current[segmentId] = window.setInterval(() => {
+            fetchStatusOnce(segmentId);
+        }, ms);
+    }, [fetchStatusOnce]);
 
     const listUrl = useMemo(() => {
         const sp = new URLSearchParams();
@@ -390,12 +449,6 @@ export default function SegmentsListPage() {
         };
     }, []);
 
-    function showToast(kind: 'info' | 'success' | 'error', text: string, ms = 3000) {
-        setToast({ kind, text });
-        if (toastTimer.current) window.clearTimeout(toastTimer.current);
-        toastTimer.current = window.setTimeout(() => setToast(null), ms);
-    }
-
     useEffect(() => {
         let abort = false;
         (async () => {
@@ -407,11 +460,8 @@ export default function SegmentsListPage() {
                 const json: ApiListResponse<SegmentItem> = await res.json();
                 if (!abort) {
                     setData(json);
-
-                    // PRIME STATUSES for visible rows right away
-                    // fire-and-forget; don't await so the table renders fast
                     for (const item of json.items ?? []) {
-                        fetchStatusOnce(item.id);
+                        fetchStatusOnce(item.id); // safe: stable callback
                     }
                 }
             } catch (e) {
@@ -421,7 +471,7 @@ export default function SegmentsListPage() {
             }
         })();
         return () => { abort = true; };
-    }, [listUrl]);
+    }, [listUrl, authHeaders, fetchStatusOnce]);
 
     function updateQuery(partial: Record<string, unknown>) {
         const sp = new URLSearchParams(search.toString());
@@ -440,63 +490,6 @@ export default function SegmentsListPage() {
     function clearFilters() {
         setSearchTerm('');
         updateQuery({ search: undefined, page: 1 });
-    }
-
-// 2) make fetchStatusOnce start polling when the backend says queued/running
-    async function fetchStatusOnce(segmentId: number) {
-        try {
-            const res = await fetch(`${backend}/companies/${hash}/segments/${segmentId}/builds/status`, {
-                headers: authHeaders(),
-            });
-            if (!res.ok) throw new Error(String(res.status));
-            const json = (await res.json()) as BackendStatus;
-
-            const payload: StatusPayload = {
-                status: (json.status as StatusPayload['status']) ?? 'unknown',
-                message: json.message ?? null,
-                updatedAt: json.updatedAt ?? new Date().toISOString(),
-                entryId: json.entryId ?? null,
-                progress: typeof json.progress === 'number' ? json.progress : null,
-            };
-
-            setStatusMap((prev) => ({ ...prev, [segmentId]: payload }));
-
-            // NEW: if it's active, ensure polling has started
-            if (payload.status === 'queued' || payload.status === 'running') {
-                startPolling(segmentId);
-                return;
-            }
-
-            // If terminal, stop and update row meta
-            if (payload.status === 'ok' || payload.status === 'error') {
-                if (pollTimers.current[segmentId]) {
-                    window.clearInterval(pollTimers.current[segmentId]);
-                    delete pollTimers.current[segmentId];
-                }
-                setData((prev) =>
-                    prev
-                        ? {
-                            ...prev,
-                            items: prev.items.map((s) =>
-                                s.id === segmentId ? { ...s, last_built_at: new Date().toISOString() } : s
-                            ),
-                        }
-                        : prev
-                );
-                showToast(
-                    payload.status === 'ok' ? 'success' : 'error',
-                    payload.status === 'ok' ? 'Segment built successfully' : 'Build failed'
-                );
-            }
-        } catch {
-            // Keep previous status
-        }
-    }
-
-
-    function startPolling(segmentId: number, ms = 2500) {
-        if (pollTimers.current[segmentId]) return;
-        pollTimers.current[segmentId] = window.setInterval(() => fetchStatusOnce(segmentId), ms);
     }
 
     async function handleBuild(id: number) {
