@@ -477,7 +477,7 @@ export default function SegmentsListPage() {
     async function handleBuild(id: number) {
         setWorkingId(id);
         try {
-            const res = await fetch(`${backend}/companies/${hash}/segments/${id}/builds`, {
+            const res = await fetch(`${backend}/companies/${hash}/segments/${id}/builds/run-now`, {
                 method: 'POST',
                 headers: authHeaders(),
                 body: JSON.stringify({ materialize: true }),

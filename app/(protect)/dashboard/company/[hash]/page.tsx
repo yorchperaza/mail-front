@@ -611,7 +611,7 @@ export default function CompanyDetailPage() {
                                 Team Members ({company.users.length})
                             </h2>
                             <Link
-                                href={`/dashboard/company/${hash}/users`}
+                                href={`/dashboard/company/${hash}/settings/users`}
                                 className="inline-flex items-center gap-1 text-xs font-medium text-purple-100 hover:text-white transition-colors"
                             >
                                 Manage users
@@ -627,7 +627,7 @@ export default function CompanyDetailPage() {
                                 <h3 className="mt-2 text-sm font-semibold text-gray-900">No users added</h3>
                                 <p className="mt-1 text-sm text-gray-500">Invite team members to collaborate.</p>
                                 <Link
-                                    href={`/dashboard/company/${hash}/users/invite`}
+                                    href={`/dashboard/company/${hash}/settings/users/invite`}
                                     className="mt-4 inline-flex items-center gap-2 rounded-lg bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700 transition-colors"
                                 >
                                     <PlusIcon className="h-4 w-4" />
@@ -642,7 +642,7 @@ export default function CompanyDetailPage() {
                                 {company.users.length > 5 && (
                                     <div className="text-center pt-2">
                                         <Link
-                                            href={`/dashboard/company/${hash}/users`}
+                                            href={`/dashboard/company/${hash}/settings/users`}
                                             className="text-sm font-medium text-indigo-600 hover:text-indigo-700"
                                         >
                                             View all {company.users.length} users →

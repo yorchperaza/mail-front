@@ -249,7 +249,7 @@ export default function ContactCreatePage() {
             const contactId = contact?.id;
             if (!contactId) throw new Error('Server did not return contact id.');
 
-            router.push(`/dashboard/company/${hash}/contacts/${contactId}`);
+            router.push(`/dashboard/company/${hash}/contacts/detail?email=${encodeURIComponent(email)}`);
         } catch (e) {
             setError(e instanceof Error ? e.message : 'Failed to create contact.');
         } finally {

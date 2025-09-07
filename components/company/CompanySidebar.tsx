@@ -144,6 +144,7 @@ export default function CompanySidebar() {
             children: [
                 { title: 'Users', href: `${base}/settings/users` },
                 { title: 'API keys', href: `${base}/settings/apikeys`, icon: KeyIcon },
+                { title: 'Company info', href: `${base}/settings/company`, icon: BuildingOffice2Icon },
                 { title: 'Billing', href: `${base}/settings/billing`, icon: CreditCardIcon },
             ],
         },
