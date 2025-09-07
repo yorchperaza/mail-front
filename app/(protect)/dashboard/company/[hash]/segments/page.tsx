@@ -48,6 +48,16 @@ type SegmentItem = {
     hash?: string | null;
 };
 
+type SyncRunResponse = {
+    mode?: 'sync';
+    status?: 'ok' | 'error';
+    error?: string;
+    entryId?: string | null;
+    result?: unknown;
+    company?: number;
+    segment?: number;
+};
+
 type ApiListResponse<T> = {
     meta: { page: number; perPage: number; total: number; totalPages: number };
     items: T[];
@@ -395,16 +405,22 @@ export default function SegmentsListPage() {
                 const res = await fetch(listUrl, { headers: authHeaders() });
                 if (!res.ok) throw new Error(`Failed to load segments (${res.status})`);
                 const json: ApiListResponse<SegmentItem> = await res.json();
-                if (!abort) setData(json);
+                if (!abort) {
+                    setData(json);
+
+                    // PRIME STATUSES for visible rows right away
+                    // fire-and-forget; don't await so the table renders fast
+                    for (const item of json.items ?? []) {
+                        fetchStatusOnce(item.id);
+                    }
+                }
             } catch (e) {
                 if (!abort) setErr(e instanceof Error ? e.message : String(e));
             } finally {
                 if (!abort) setLoading(false);
             }
         })();
-        return () => {
-            abort = true;
-        };
+        return () => { abort = true; };
     }, [listUrl]);
 
     function updateQuery(partial: Record<string, unknown>) {
@@ -426,6 +442,7 @@ export default function SegmentsListPage() {
         updateQuery({ search: undefined, page: 1 });
     }
 
+// 2) make fetchStatusOnce start polling when the backend says queued/running
     async function fetchStatusOnce(segmentId: number) {
         try {
             const res = await fetch(`${backend}/companies/${hash}/segments/${segmentId}/builds/status`, {
@@ -444,6 +461,13 @@ export default function SegmentsListPage() {
 
             setStatusMap((prev) => ({ ...prev, [segmentId]: payload }));
 
+            // NEW: if it's active, ensure polling has started
+            if (payload.status === 'queued' || payload.status === 'running') {
+                startPolling(segmentId);
+                return;
+            }
+
+            // If terminal, stop and update row meta
             if (payload.status === 'ok' || payload.status === 'error') {
                 if (pollTimers.current[segmentId]) {
                     window.clearInterval(pollTimers.current[segmentId]);
@@ -469,6 +493,7 @@ export default function SegmentsListPage() {
         }
     }
 
+
     function startPolling(segmentId: number, ms = 2500) {
         if (pollTimers.current[segmentId]) return;
         pollTimers.current[segmentId] = window.setInterval(() => fetchStatusOnce(segmentId), ms);
@@ -477,32 +502,68 @@ export default function SegmentsListPage() {
     async function handleBuild(id: number) {
         setWorkingId(id);
         try {
-            const res = await fetch(`${backend}/companies/${hash}/segments/${id}/builds/run-now`, {
-                method: 'POST',
-                headers: authHeaders(),
-                body: JSON.stringify({ materialize: true }),
-            });
-            if (res.status !== 202) throw new Error(`Failed to enqueue (${res.status})`);
-            const payload: EnqueueResponse = await res.json();
+            const res = await fetch(
+                `${backend}/companies/${hash}/segments/${id}/builds/run-now`,
+                { method: 'POST', headers: authHeaders(), body: JSON.stringify({ materialize: true }) }
+            );
 
-            setStatusMap((prev) => ({
-                ...prev,
-                [id]: {
-                    status: 'queued',
-                    entryId: payload.entryId,
-                    updatedAt: new Date().toISOString(),
-                    progress: null,
-                    message: null,
-                },
-            }));
-            showToast('info', 'Build enqueued');
-            startPolling(id);
+            // Async enqueue path (old behavior)
+            if (res.status === 202) {
+                const payload = (await res.json()) as { entryId?: string | null };
+                setStatusMap((prev) => ({
+                    ...prev,
+                    [id]: {
+                        status: 'queued',
+                        entryId: payload?.entryId ?? null,
+                        updatedAt: new Date().toISOString(),
+                        progress: null,
+                        message: 'Waiting for a worker',
+                    },
+                }));
+                showToast('info', 'Build enqueued');
+                startPolling(id);
+                return;
+            }
+
+            // Synchronous path with heartbeat
+            if (res.ok) {
+                let jsonUnknown: unknown;
+                try {
+                    jsonUnknown = await res.json();
+                } catch {
+                    jsonUnknown = {};
+                }
+                const json = jsonUnknown as Partial<SyncRunResponse>;
+
+                if (json.mode === 'sync' && json.status === 'ok') {
+                    setStatusMap((prev) => ({
+                        ...prev,
+                        [id]: {
+                            status: 'ok',
+                            entryId: null,
+                            updatedAt: new Date().toISOString(),
+                            progress: 100,
+                            message: 'Segment built',
+                        },
+                    }));
+                    showToast('success', 'Segment built successfully');
+                    return;
+                }
+
+                throw new Error(
+                    json.error ? `Build failed: ${String(json.error)}` : `Unexpected response (${res.status})`
+                );
+            }
+
+            // Non-OK / Non-202
+            throw new Error(`Failed to enqueue (${res.status})`);
         } catch (e) {
-            showToast('error', e instanceof Error ? e.message : 'Failed to enqueue');
+            showToast('error', e instanceof Error ? e.message : 'Failed to start build');
         } finally {
             setWorkingId(null);
         }
     }
+
 
     async function handleDelete(id: number) {
         if (!confirm('Delete this segment? This action cannot be undone.')) return;

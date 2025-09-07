@@ -540,7 +540,7 @@ export default function CompanyDetailPage() {
                                     <MapPinIcon className="mx-auto h-12 w-12 text-gray-300" />
                                     <p className="mt-2 text-sm text-gray-500">No address on file</p>
                                     <Link
-                                        href={`/dashboard/company/${hash}/settings`}
+                                        href={`/dashboard/company/${hash}/settings/company`}
                                         className="mt-3 inline-flex items-center text-sm font-medium text-indigo-600 hover:text-indigo-700"
                                     >
                                         Add address →
