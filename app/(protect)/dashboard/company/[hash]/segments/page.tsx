@@ -56,6 +56,7 @@ type SyncRunResponse = {
     result?: unknown;
     company?: number;
     segment?: number;
+    at?: string;
 };
 
 type ApiListResponse<T> = {
@@ -423,13 +424,6 @@ export default function SegmentsListPage() {
         }
     }, [backend, hash, authHeaders, showToast]);
 
-    const startPolling = useCallback((segmentId: number, ms = 2500) => {
-        if (pollTimers.current[segmentId]) return;
-        pollTimers.current[segmentId] = window.setInterval(() => {
-            fetchStatusOnce(segmentId);
-        }, ms);
-    }, [fetchStatusOnce]);
-
     const listUrl = useMemo(() => {
         const sp = new URLSearchParams();
         sp.set('page', String(page));
@@ -500,10 +494,10 @@ export default function SegmentsListPage() {
                 { method: 'POST', headers: authHeaders(), body: JSON.stringify({ materialize: true }) }
             );
 
-            // Async enqueue path (old behavior)
+            // 202 → enqueued (async path)
             if (res.status === 202) {
                 const payload = (await res.json()) as { entryId?: string | null };
-                setStatusMap((prev) => ({
+                setStatusMap(prev => ({
                     ...prev,
                     [id]: {
                         status: 'queued',
@@ -514,49 +508,105 @@ export default function SegmentsListPage() {
                     },
                 }));
                 showToast('info', 'Build enqueued');
-                startPolling(id);
+                if (!pollTimers.current[id]) {
+                    pollTimers.current[id] = window.setInterval(() => fetchStatusOnce(id), 2500);
+                }
                 return;
             }
 
-            // Synchronous path with heartbeat
-            if (res.ok) {
-                let jsonUnknown: unknown;
-                try {
-                    jsonUnknown = await res.json();
-                } catch {
-                    jsonUnknown = {};
-                }
-                const json = jsonUnknown as Partial<SyncRunResponse>;
+            // Non-2xx → real error
+            if (!res.ok) {
+                throw new Error(`Failed to enqueue (${res.status})`);
+            }
 
-                if (json.mode === 'sync' && json.status === 'ok') {
-                    setStatusMap((prev) => ({
+            // 200 → synchronous path; do not throw, decide by JSON.status
+            let json: SyncRunResponse = {};
+            try {
+                json = (await res.json()) as SyncRunResponse;
+            } catch {
+                // If backend ever returns empty body with 200, still show a generic success
+                json = { mode: 'sync', status: 'ok' };
+            }
+
+            if (json.mode === 'sync') {
+                const finishedAt = json.at ?? new Date().toISOString();
+
+                if (json.status === 'ok') {
+                    // reflect success in status + last_built_at from server
+                    setStatusMap(prev => ({
                         ...prev,
                         [id]: {
                             status: 'ok',
                             entryId: null,
-                            updatedAt: new Date().toISOString(),
+                            updatedAt: finishedAt,
                             progress: 100,
                             message: 'Segment built',
                         },
                     }));
+                    setData(prev =>
+                        prev
+                            ? {
+                                ...prev,
+                                items: prev.items.map(s =>
+                                    s.id === id ? { ...s, last_built_at: finishedAt } : s
+                                ),
+                            }
+                            : prev
+                    );
                     showToast('success', 'Segment built successfully');
                     return;
                 }
 
-                throw new Error(
-                    json.error ? `Build failed: ${String(json.error)}` : `Unexpected response (${res.status})`
+                if (json.status === 'error') {
+                    // 200 with job-level error → show error but don’t throw
+                    const msg = json.error ? String(json.error) : 'Build failed';
+                    setStatusMap(prev => ({
+                        ...prev,
+                        [id]: {
+                            status: 'error',
+                            entryId: null,
+                            updatedAt: finishedAt,
+                            progress: null,
+                            message: msg,
+                        },
+                    }));
+                    showToast('error', msg);
+                    return;
+                }
+
+                // Unknown shape but 200 → treat as success (defensive)
+                setStatusMap(prev => ({
+                    ...prev,
+                    [id]: {
+                        status: 'ok',
+                        entryId: null,
+                        updatedAt: finishedAt,
+                        progress: 100,
+                        message: 'Segment built',
+                    },
+                }));
+                setData(prev =>
+                    prev
+                        ? {
+                            ...prev,
+                            items: prev.items.map(s =>
+                                s.id === id ? { ...s, last_built_at: finishedAt } : s
+                            ),
+                        }
+                        : prev
                 );
+                showToast('success', 'Segment built successfully');
+                return;
             }
 
-            // Non-OK / Non-202
-            throw new Error(`Failed to enqueue (${res.status})`);
+            // Fallback for unexpected but OK 200 bodies
+            showToast('success', 'Segment built successfully');
         } catch (e) {
             showToast('error', e instanceof Error ? e.message : 'Failed to start build');
         } finally {
             setWorkingId(null);
         }
     }
-
 
     async function handleDelete(id: number) {
         if (!confirm('Delete this segment? This action cannot be undone.')) return;
