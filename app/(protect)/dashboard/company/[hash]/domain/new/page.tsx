@@ -24,7 +24,10 @@ type DnsTxt = TxtLike;
 
 type DnsMx = string | { host: string; priority?: number };
 
-type DnsDkim = Record<string, string | { selector?: string; value: string }> | null;
+type DnsDkim =
+    | Record<string, string | { selector?: string; value: string }>
+    | { name: string; value: string }
+    | null;
 
 type DnsRecords = {
     spf_expected?: TxtLike | TxtLike[] | null;   // simplified to avoid array inside the item
@@ -38,7 +41,7 @@ type CreatedDomain = {
     domain: string;
     status: 'pending' | 'verified' | string | null;
     created_at: string | null;
-    txt?: DnsTxt[] | null;
+    txt?: DnsTxt | DnsTxt[] | null;
     records: DnsRecords;
     smtp: {
         host: string;
@@ -165,11 +168,25 @@ function mxToRows(v: DnsRecords['mx_expected']): Array<{ name: string; value: st
 
 function dkimToRows(d: DnsDkim): Array<{ name: string; value: string }> {
     if (!d) return [];
+
+    // legacy single-object shape: { name: 'selector._domainkey', value: 'v=DKIM1; ...' }
+    if (typeof d === 'object' && 'name' in d && 'value' in d) {
+        return [{ name: d.name as string, value: d.value as string }];
+    }
+
+    // map shape: { selector: 'v=DKIM1; ...' } or { selector: { value: 'v=DKIM1; ...' } }
     const out: Array<{ name: string; value: string }> = [];
-    for (const key of Object.keys(d)) {
-        const v = d[key];
-        if (typeof v === 'string') out.push({ name: `${key}._domainkey`, value: v });
-        else out.push({ name: `${(v.selector ?? key)}._domainkey`, value: v.value });
+    for (const key of Object.keys(d as Record<string, unknown>)) {
+        const v = (d as Record<string, unknown>)[key];
+        if (typeof v === 'string') {
+            out.push({ name: `${key}._domainkey`, value: v });
+        } else if (v && typeof v === 'object') {
+            const val = (v as { value?: string }).value;
+            if (typeof val === 'string') {
+                const sel = (v as { selector?: string }).selector ?? key;
+                out.push({ name: `${sel}._domainkey`, value: val });
+            }
+        }
     }
     return out;
 }
@@ -254,7 +271,11 @@ export default function CreateDomainPage() {
     const dmarcRow = useMemo(() => dmarcToRow(created?.records?.dmarc_expected ?? null), [created]);
     const mxRows = useMemo(() => mxToRows(created?.records?.mx_expected ?? null), [created]);
     const dkimRows = useMemo(() => dkimToRows(created?.records?.dkim ?? null), [created]);
-    const extraTxt = useMemo(() => (created?.txt ?? []).map(txtToRow), [created]);
+    const extraTxt = useMemo(() => {
+        const t = created?.txt;
+        if (!t) return [];
+        return Array.isArray(t) ? t.map(txtToRow) : [txtToRow(t)];
+    }, [created]);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
