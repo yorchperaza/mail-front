@@ -3,6 +3,9 @@
 import DashboardLayout from "@/components/dashboard/DashboardLayout";
 import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import SessionKeeper from "@/components/session/SessionKeeper";
+import SessionGuard from "@/components/session/SessionGuard";
+
 
 interface User {
     media: {
@@ -64,7 +67,15 @@ export default function DashboardPageLayout({
                 },
             }}
         >
-            {children}
+            <SessionKeeper
+                idleMs={30 * 60 * 1000}        // 30 minutes inactivity window
+                refreshSkewMs={2 * 60 * 1000}  // refresh 2 min before exp
+                checkEveryMs={30 * 1000}       // check every 30s
+                heartbeatEveryMs={5 * 60 * 1000} // server ping (optional)
+            />
+            <SessionGuard>
+                {children}
+            </SessionGuard>
         </DashboardLayout>
     );
 }
