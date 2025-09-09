@@ -2,7 +2,6 @@
 
 import React, {useEffect, useMemo, useState} from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
 import {
     ArrowLeftIcon,
     CheckIcon,
@@ -11,6 +10,14 @@ import {
     EyeIcon,
     ExclamationTriangleIcon,
     PlusIcon,
+    SparklesIcon,
+    TagIcon,
+    Cog6ToothIcon,
+    ArrowsPointingOutIcon,
+    ArrowsPointingInIcon,
+    DocumentPlusIcon,
+    BeakerIcon,
+    BookOpenIcon,
 } from '@heroicons/react/24/outline';
 import type { ReactCodeMirrorProps } from '@uiw/react-codemirror';
 
@@ -34,7 +41,7 @@ if (typeof window !== 'undefined') {
 type Template = {
     id: number;
     name: string | null;
-    engine: string | null; // 'raw' | 'handlebars' | null
+    engine: string | null;
     version: number | null;
     html: string | null;
     text: string | null;
@@ -42,49 +49,240 @@ type Template = {
 };
 
 type ContentMode = 'html' | 'text';
+type ViewMode = 'split' | 'editor' | 'preview';
 
 type InlineResponse = { html?: string; error?: string };
 type TextifyResponse = { text?: string; error?: string };
 
-/* ----------------------------- Merge tags ------------------------------ */
+/* ----------------------------- Template Library ------------------------------ */
 
-const TAGS = [
-    { key: '{{contact.name}}', label: 'Contact Name' },
-    { key: '{{contact.email}}', label: 'Contact Email' },
-    { key: '{{company.name}}', label: 'Company Name' },
-    { key: '{{today}}', label: 'Today (YYYY-MM-DD)' },
-    { key: '{{unsubscribe_url}}', label: 'Unsubscribe URL' },
-    { key: '{{view_in_browser_url}}', label: 'View in browser URL' },
+const STARTER_TEMPLATES = [
+    {
+        id: 'newsletter',
+        name: 'Newsletter',
+        icon: BookOpenIcon,
+        description: 'Modern newsletter with header, content sections, and footer',
+        html: `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{company.name}} Newsletter</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 20px; text-align: center; }
+        .header h1 { color: #ffffff; margin: 0; font-size: 28px; }
+        .content { padding: 40px 20px; }
+        .section { margin-bottom: 30px; }
+        .section h2 { color: #1f2937; font-size: 20px; margin-bottom: 10px; }
+        .section p { color: #4b5563; line-height: 1.6; }
+        .button { display: inline-block; padding: 12px 24px; background-color: #6366f1; color: #ffffff; text-decoration: none; border-radius: 6px; font-weight: 600; }
+        .footer { background-color: #f9fafb; padding: 30px 20px; text-align: center; font-size: 14px; color: #6b7280; }
+        .footer a { color: #6366f1; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>{{company.name}}</h1>
+        </div>
+        <div class="content">
+            <div class="section">
+                <p>Hi {{contact.name}},</p>
+                <h2>Welcome to our newsletter!</h2>
+                <p>We're excited to share our latest updates with you.</p>
+            </div>
+            <div class="section">
+                <h2>What's New</h2>
+                <p>Add your main content here...</p>
+                <p><a href="#" class="button">Learn More</a></p>
+            </div>
+        </div>
+        <div class="footer">
+            <p>© {{company.name}} · {{today}}</p>
+            <p>
+                <a href="{{unsubscribe_url}}">Unsubscribe</a> · 
+                <a href="{{view_in_browser_url}}">View in browser</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>`,
+        text: `{{company.name}} Newsletter
+
+Hi {{contact.name}},
+
+Welcome to our newsletter!
+We're excited to share our latest updates with you.
+
+What's New
+Add your main content here...
+
+Learn More: [link]
+
+---
+© {{company.name}} · {{today}}
+Unsubscribe: {{unsubscribe_url}}
+View in browser: {{view_in_browser_url}}`,
+    },
+    {
+        id: 'announcement',
+        name: 'Product Announcement',
+        icon: SparklesIcon,
+        description: 'Eye-catching announcement template with hero image',
+        html: `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Big Announcement from {{company.name}}</title>
+    <style>
+        body { margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; }
+        .container { max-width: 600px; margin: 0 auto; background-color: #ffffff; }
+        .hero { background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); padding: 60px 20px; text-align: center; }
+        .hero h1 { color: #ffffff; margin: 0 0 10px 0; font-size: 36px; }
+        .hero p { color: rgba(255,255,255,0.9); font-size: 18px; margin: 0; }
+        .content { padding: 40px 20px; text-align: center; }
+        .content h2 { color: #1f2937; font-size: 24px; margin-bottom: 20px; }
+        .content p { color: #4b5563; line-height: 1.8; font-size: 16px; margin-bottom: 30px; }
+        .cta-button { display: inline-block; padding: 16px 40px; background-color: #f5576c; color: #ffffff; text-decoration: none; border-radius: 50px; font-weight: 600; font-size: 16px; }
+        .footer { padding: 30px 20px; text-align: center; font-size: 12px; color: #9ca3af; }
+        .footer a { color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="hero">
+            <h1>🎉 Big News!</h1>
+            <p>Something amazing is coming...</p>
+        </div>
+        <div class="content">
+            <h2>Introducing Our Latest Innovation</h2>
+            <p>Dear {{contact.name}},</p>
+            <p>We're thrilled to announce something that will change everything. After months of hard work, we're ready to share it with you.</p>
+            <a href="#" class="cta-button">Get Early Access</a>
+        </div>
+        <div class="footer">
+            <p>{{company.name}} · {{today}}</p>
+            <p><a href="{{unsubscribe_url}}">Unsubscribe</a> · <a href="{{view_in_browser_url}}">View online</a></p>
+        </div>
+    </div>
+</body>
+</html>`,
+        text: `🎉 Big News from {{company.name}}!
+
+Dear {{contact.name}},
+
+We're thrilled to announce something that will change everything. After months of hard work, we're ready to share it with you.
+
+Get Early Access: [link]
+
+---
+{{company.name}} · {{today}}
+Unsubscribe: {{unsubscribe_url}}
+View online: {{view_in_browser_url}}`,
+    },
+    {
+        id: 'simple',
+        name: 'Simple Message',
+        icon: DocumentTextIcon,
+        description: 'Clean and minimal text-focused template',
+        html: `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { margin: 0; padding: 20px; font-family: Georgia, serif; line-height: 1.6; color: #333; background-color: #fff; }
+        .wrapper { max-width: 600px; margin: 0 auto; }
+        h1 { font-size: 24px; margin-bottom: 20px; }
+        p { margin-bottom: 15px; }
+        .signature { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; font-size: 14px; color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="wrapper">
+        <p>Hi {{contact.name}},</p>
+        <p>Your message content goes here...</p>
+        <p>Best regards,<br>{{company.name}}</p>
+        <div class="signature">
+            <p>This email was sent to {{contact.email}}</p>
+            <p><a href="{{unsubscribe_url}}">Unsubscribe</a> | <a href="{{view_in_browser_url}}">View in browser</a></p>
+        </div>
+    </div>
+</body>
+</html>`,
+        text: `Hi {{contact.name}},
+
+Your message content goes here...
+
+Best regards,
+{{company.name}}
+
+---
+This email was sent to {{contact.email}}
+Unsubscribe: {{unsubscribe_url}}
+View in browser: {{view_in_browser_url}}`,
+    },
 ];
 
-const SNIPPETS = [
+/* ----------------------------- Merge tags ------------------------------ */
+
+const MERGE_TAGS = [
+    { category: 'Contact', tags: [
+            { key: '{{contact.name}}', label: 'Name', icon: '👤' },
+            { key: '{{contact.email}}', label: 'Email', icon: '✉️' },
+            { key: '{{contact.first_name}}', label: 'First Name', icon: '👤' },
+            { key: '{{contact.last_name}}', label: 'Last Name', icon: '👤' },
+        ]},
+    { category: 'Company', tags: [
+            { key: '{{company.name}}', label: 'Company Name', icon: '🏢' },
+            { key: '{{company.website}}', label: 'Website', icon: '🌐' },
+        ]},
+    { category: 'System', tags: [
+            { key: '{{today}}', label: 'Today\'s Date', icon: '📅' },
+            { key: '{{unsubscribe_url}}', label: 'Unsubscribe Link', icon: '🔗' },
+            { key: '{{view_in_browser_url}}', label: 'Browser View Link', icon: '🔗' },
+        ]},
+];
+
+const CONTENT_BLOCKS = [
     {
-        label: 'Greeting block',
-        html: `<p>Hi {{contact.name}},</p>\n<p>We thought you might like this update from {{company.name}}.</p>\n`,
-        text: `Hi {{contact.name}},\n\nWe thought you might like this update from {{company.name}}.\n\n`,
+        label: 'Header Section',
+        icon: '🎯',
+        html: `<div style="padding: 30px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); text-align: center;">
+    <h1 style="color: #ffffff; margin: 0;">{{company.name}}</h1>
+</div>`,
+        text: `=== {{company.name}} ===\n`,
     },
     {
-        label: 'Footer (legal + unsubscribe)',
-        html: `<hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0" />\n<p style="font-size:12px;color:#6b7280">You are receiving this email because you opted in at our website. <a href="{{unsubscribe_url}}">Unsubscribe</a> · <a href="{{view_in_browser_url}}">View in browser</a></p>\n`,
-        text: `----\nYou are receiving this email because you opted in at our website.\nUnsubscribe: {{unsubscribe_url}}\nView in browser: {{view_in_browser_url}}\n`,
+        label: 'Call-to-Action Button',
+        icon: '🔘',
+        html: `<div style="text-align: center; margin: 30px 0;">
+    <a href="#" style="display: inline-block; padding: 14px 32px; background-color: #6366f1; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: 600;">Click Here</a>
+</div>`,
+        text: `\n[Click Here] → [link]\n`,
     },
     {
-        label: 'One-column section (responsive)',
-        html: `<table role="presentation" width="100%" cellPadding="0" cellSpacing="0" style="border-collapse:collapse;">
-  <tr>
-    <td align="center" style="padding:0 12px;">
-      <table role="presentation" width="600" style="max-width:600px;border-collapse:collapse;">
-        <tr>
-          <td style="padding:16px 20px;">
-            <h2 style="margin:0 0 8px;font-size:20px;line-height:1.2;">Section title</h2>
-            <p style="margin:0;color:#4b5563;">Your content here…</p>
-          </td>
-        </tr>
-      </table>
-    </td>
-  </tr>
-</table>\n`,
-        text: `Section title\n\nYour content here…\n`,
+        label: 'Image Placeholder',
+        icon: '🖼️',
+        html: `<div style="text-align: center; margin: 20px 0;">
+    <img src="https://via.placeholder.com/600x300" alt="Image" style="max-width: 100%; height: auto; border-radius: 8px;">
+</div>`,
+        text: `\n[Image]\n`,
+    },
+    {
+        label: 'Footer with Unsubscribe',
+        icon: '📝',
+        html: `<div style="margin-top: 40px; padding: 20px; background-color: #f9fafb; text-align: center; font-size: 12px; color: #6b7280;">
+    <p>© {{company.name}} · {{today}}</p>
+    <p>
+        <a href="{{unsubscribe_url}}" style="color: #6366f1;">Unsubscribe</a> · 
+        <a href="{{view_in_browser_url}}" style="color: #6366f1;">View in browser</a>
+    </p>
+</div>`,
+        text: `\n---\n© {{company.name}} · {{today}}\nUnsubscribe: {{unsubscribe_url}}\nView in browser: {{view_in_browser_url}}\n`,
     },
 ];
 
@@ -100,17 +298,20 @@ function defaultPreviewData() {
     const mm = String(d.getMonth() + 1).padStart(2, '0');
     const dd = String(d.getDate()).padStart(2, '0');
     return {
-        contact: { name: 'Jane Example', email: 'jane@example.com' },
-        company: { name: 'Acme Inc.' },
+        contact: {
+            name: 'Jane Example',
+            email: 'jane@example.com',
+            first_name: 'Jane',
+            last_name: 'Example'
+        },
+        company: {
+            name: 'Acme Inc.',
+            website: 'https://acme.example.com'
+        },
         today: `${yyyy}-${mm}-${dd}`,
         unsubscribe_url: 'https://example.com/unsubscribe?c=123',
         view_in_browser_url: 'https://example.com/campaigns/preview/abc',
     };
-}
-
-function requiresUnsubscribe(htmlOrText: string) {
-    const needle = '{{unsubscribe_url}}';
-    return !htmlOrText?.includes(needle);
 }
 
 /* ------------------------------ Page --------------------------------- */
@@ -129,18 +330,25 @@ export default function TemplateCreatePage() {
 
     // Basics
     const [name, setName] = useState('');
-    const [engine, setEngine] = useState<string>('raw'); // 'raw' | 'handlebars'
-    const [version, setVersion] = useState<string>('');
+    const [engine, setEngine] = useState<string>('handlebars');
+    const [version, setVersion] = useState<string>('1');
 
     // Content
     const [mode, setMode] = useState<ContentMode>('html');
     const [html, setHtml] = useState<string>('');
     const [text, setText] = useState<string>('');
 
+    // View
+    const [viewMode, setViewMode] = useState<ViewMode>('split');
+    const [showTemplateLibrary, setShowTemplateLibrary] = useState(false);
+    const [showMergeTags, setShowMergeTags] = useState(false);
+    const [showBlocks, setShowBlocks] = useState(false);
+
     // Preview data (JSON)
     const [dataJSON, setDataJSON] = useState(JSON.stringify(defaultPreviewData(), null, 2));
     const [dataObj, setDataObj] = useState<Record<string, unknown>>(defaultPreviewData());
     const [dataErr, setDataErr] = useState<string | null>(null);
+    const [showPreviewData, setShowPreviewData] = useState(false);
 
     // Inline CSS & textify helpers
     const [inlineCss, setInlineCss] = useState(true);
@@ -162,14 +370,13 @@ export default function TemplateCreatePage() {
             setDataObj(parsed);
             setDataErr(null);
         } catch {
-            setDataErr('Preview data is not valid JSON.');
+            setDataErr('Invalid JSON format');
         }
     }, [dataJSON]);
 
-    /* ---------- inline CSS on server (optional) ---------- */
+    /* ---------- inline CSS on server ---------- */
     useEffect(() => {
         if (!inlineCss || mode !== 'html' || !html.trim()) {
-            // reset state when there is no content
             setInlineErr(null);
             setInlinedHtml('');
             return;
@@ -196,11 +403,10 @@ export default function TemplateCreatePage() {
                     payload = await res.json();
                 } else {
                     const txt = await res.text();
-                    throw new Error(`Unexpected response (${res.status}): ${txt.slice(0, 120)}…`);
+                    throw new Error(`Unexpected response: ${txt.slice(0, 120)}…`);
                 }
 
-                if (!res.ok || payload.error) throw new Error(payload.error || `Inline failed (${res.status})`);
-
+                if (!res.ok || payload.error) throw new Error(payload.error || `Inline failed`);
                 setInlinedHtml(payload.html || '');
             } catch (e) {
                 if (!(e instanceof DOMException && e.name === 'AbortError')) {
@@ -223,9 +429,7 @@ export default function TemplateCreatePage() {
         try {
             if (mode === 'text') {
                 const t = substitute(text || '', dataObj);
-                return `<pre style="white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:14px;line-height:1.4;margin:0">${escapeHtml(
-                    t,
-                )}</pre>`;
+                return `<pre style="white-space:pre-wrap;font-family:ui-monospace,Menlo,monospace;font-size:14px;line-height:1.4;margin:16px;color:#111827">${escapeHtml(t)}</pre>`;
             }
 
             const input = html || '';
@@ -237,25 +441,48 @@ export default function TemplateCreatePage() {
             }
 
             if (inlineCss) {
-                if (inlineErr) return `<p style="color:#b91c1c">Inline CSS error: ${escapeHtml(inlineErr)}</p>`;
-                if (inlining) return `<p style="color:#6b7280">Inlining CSS…</p>`;
+                if (inlineErr) return `<p style="color:#ef4444;padding:20px">⚠️ CSS inline error: ${escapeHtml(inlineErr)}</p>`;
+                if (inlining) return `<div style="padding:20px;text-align:center"><p style="color:#6b7280">Processing CSS...</p></div>`;
                 return inlinedHtml || compiled;
             }
             return compiled;
         } catch (e) {
-            return `<p style="color:#b91c1c">Preview error: ${(e as Error).message}</p>`;
+            return `<p style="color:#ef4444;padding:20px">⚠️ Preview error: ${(e as Error).message}</p>`;
         }
     }, [mode, html, text, engine, dataObj, inlineCss, inlining, inlineErr, inlinedHtml]);
 
     /* ---------- warnings ---------- */
-    const warnUnsub = useMemo(() => {
+    const hasUnsubscribe = useMemo(() => {
         const content = mode === 'html' ? html : text;
-        return requiresUnsubscribe(content);
+        return content?.includes('{{unsubscribe_url}}');
     }, [mode, html, text]);
 
-    const canSubmit = name.trim().length > 0;
+    const canSubmit = name.trim().length > 0 && (html.trim().length > 0 || text.trim().length > 0);
 
     /* ---------- actions ---------- */
+
+    function loadTemplate(template: typeof STARTER_TEMPLATES[0]) {
+        setHtml(template.html);
+        setText(template.text);
+        setName(template.name);
+        setShowTemplateLibrary(false);
+    }
+
+    function insertTag(tag: string) {
+        if (mode === 'html') {
+            setHtml(prev => prev + tag);
+        } else {
+            setText(prev => prev + tag);
+        }
+    }
+
+    function insertBlock(block: typeof CONTENT_BLOCKS[0]) {
+        if (mode === 'html') {
+            setHtml(prev => prev + '\n' + block.html);
+        } else {
+            setText(prev => prev + '\n' + block.text);
+        }
+    }
 
     async function onGeneratePlainText() {
         setTextifyErr(null);
@@ -268,9 +495,9 @@ export default function TemplateCreatePage() {
                 body: JSON.stringify({ html: source }),
             });
             const json: TextifyResponse = await res.json();
-            if (!res.ok || json.error) throw new Error(json.error || `Convert failed (${res.status})`);
-            setMode('text');
+            if (!res.ok || json.error) throw new Error(json.error || `Convert failed`);
             setText(json.text || '');
+            setMode('text');
         } catch (e) {
             setTextifyErr((e as Error).message);
         } finally {
@@ -278,9 +505,9 @@ export default function TemplateCreatePage() {
         }
     }
 
-    async function createTemplate(redirectToDetail: boolean) {
+    async function createTemplate(action: 'save' | 'save-continue' | 'save-test') {
         if (!backend) return setErr('Missing backend URL');
-        if (!canSubmit) return setErr('Please enter a name.');
+        if (!canSubmit) return setErr('Please enter a name and content');
 
         setSaving(true);
         setErr(null);
@@ -290,8 +517,8 @@ export default function TemplateCreatePage() {
                 name: name.trim(),
                 engine: engine.trim() || null,
                 version: version.trim() === '' ? null : Number(version),
-                html: mode === 'html' ? (html.trim() === '' ? null : html) : null,
-                text: mode === 'text' ? (text.trim() === '' ? null : text) : null,
+                html: html.trim() === '' ? null : html,
+                text: text.trim() === '' ? null : text,
             };
 
             const res = await fetch(`${backend}/companies/${hash}/templates`, {
@@ -300,11 +527,16 @@ export default function TemplateCreatePage() {
                 body: JSON.stringify(payload),
             });
             const json = (await res.json()) as Template | { error?: string };
-            if (!res.ok) throw new Error('error' in json && json.error ? json.error : `Create failed (${res.status})`);
+            if (!res.ok) throw new Error('error' in json && json.error ? json.error : `Create failed`);
 
             const created = json as Template;
-            if (redirectToDetail) {
+
+            if (action === 'save-continue') {
                 router.push(`/dashboard/company/${hash}/templates/${created.id}`);
+            } else if (action === 'save-test') {
+                // Open template detail page in new tab for testing
+                window.open(`/dashboard/company/${hash}/templates/${created.id}`, '_blank');
+                router.push(backHref);
             } else {
                 router.push(backHref);
             }
@@ -315,281 +547,490 @@ export default function TemplateCreatePage() {
         }
     }
 
-    /* ------------------------------- Render (STACKED) -------------------------------- */
+    /* ------------------------------- Render -------------------------------- */
 
     return (
-        <div className="max-w-7xl mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-3">
-                <button onClick={() => router.push(backHref)} className="inline-flex items-center text-gray-600 hover:text-gray-800">
-                    <ArrowLeftIcon className="h-5 w-5 mr-1" /> Back
-                </button>
-                <h1 className="text-2xl font-semibold">Create Template</h1>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => createTemplate(false)}
-                        disabled={!canSubmit || saving}
-                        className="inline-flex items-center px-4 py-2 rounded bg-blue-800 text-white hover:bg-blue-900 disabled:opacity-60"
-                    >
-                        <CheckIcon className="h-5 w-5 mr-1" />
-                        {saving ? 'Creating…' : 'Create & return'}
-                    </button>
-                    <button
-                        onClick={() => createTemplate(true)}
-                        disabled={!canSubmit || saving}
-                        className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
-                    >
-                        {saving ? 'Working…' : 'Create & open'}
-                    </button>
-                </div>
-            </div>
-
-            {/* Basics */}
-            <div className="bg-white border rounded-lg p-4 space-y-4">
-                <div className="grid md:grid-cols-4 gap-4">
-                    <div className="md:col-span-2">
-                        <label className="block text-sm font-medium mb-1">
-                            Name <span className="text-red-600">*</span>
-                        </label>
-                        <input
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            placeholder="e.g. Newsletter v2"
-                            className="w-full rounded border px-3 py-2"
-                        />
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+            <div className="max-w-7xl mx-auto p-6">
+                {/* Header */}
+                <div className="flex items-center justify-between mb-6">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => router.push(backHref)}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 transition-all hover:shadow"
+                        >
+                            <ArrowLeftIcon className="h-4 w-4" />
+                            Back to Templates
+                        </button>
+                        <div className="h-8 w-px bg-gray-200" />
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">Create Email Template</h1>
+                            <p className="text-sm text-gray-500">Design and customize your email template</p>
+                        </div>
                     </div>
 
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Engine</label>
-                        <select value={engine} onChange={(e) => setEngine(e.target.value)} className="w-full rounded border px-3 py-2">
-                            <option value="raw">raw (HTML as-is)</option>
-                            <option value="handlebars">handlebars ({'{{tags}}'})</option>
-                            <option value="">(none)</option>
-                        </select>
-                    </div>
-
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Version</label>
-                        <input
-                            type="number"
-                            inputMode="numeric"
-                            value={version}
-                            onChange={(e) => setVersion(e.target.value)}
-                            placeholder="optional"
-                            className="w-full rounded border px-3 py-2"
-                        />
-                    </div>
-                </div>
-
-                {/* Mode switch + warnings */}
-                <div className="flex flex-wrap items-center gap-2">
-                    <button
-                        onClick={() => setMode('html')}
-                        className={cx(
-                            'inline-flex items-center px-3 py-1.5 rounded border text-sm',
-                            mode === 'html' ? 'bg-blue-50 border-blue-200 text-blue-800' : 'hover:bg-gray-50',
-                        )}
-                    >
-                        <CodeBracketIcon className="h-4 w-4 mr-1" /> HTML
-                    </button>
-                    <button
-                        onClick={() => setMode('text')}
-                        className={cx(
-                            'inline-flex items-center px-3 py-1.5 rounded border text-sm',
-                            mode === 'text' ? 'bg-blue-50 border-blue-200 text-blue-800' : 'hover:bg-gray-50',
-                        )}
-                    >
-                        <DocumentTextIcon className="h-4 w-4 mr-1" /> Plain text
-                    </button>
-
-                    <label className="ml-4 inline-flex items-center gap-2 text-sm">
-                        <input type="checkbox" checked={inlineCss} onChange={(e) => setInlineCss(e.target.checked)} />
-                        Inline CSS for preview
-                    </label>
-
-                    <div className="ml-auto flex items-center gap-3 text-sm">
-                        {warnUnsub && (
-                            <span className="inline-flex items-center text-amber-700">
-                <ExclamationTriangleIcon className="h-4 w-4 mr-1" />
-                <span>Consider adding {'{{unsubscribe_url}}'} to reduce spam complaints.</span>
-              </span>
-                        )}
-                        {inlineErr && <span className="text-sm text-red-600">Inline CSS error: {inlineErr}</span>}
-                        {inlining && <span className="text-sm text-gray-600">Inlining…</span>}
-                    </div>
-                </div>
-            </div>
-
-            {/* EDITOR + TOOLS + PREVIEW DATA (TOP) */}
-            <div className="bg-white border rounded-lg p-4 space-y-4">
-                {/* Insert tools */}
-                <div className="flex flex-wrap items-center gap-2">
-                    {/* Tag picker */}
                     <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-600">Insert tag:</span>
-                        <div className="flex flex-wrap gap-2">
-                            {TAGS.map((t) => (
+                        <button
+                            onClick={() => createTemplate('save')}
+                            disabled={!canSubmit || saving}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        >
+                            <CheckIcon className="h-4 w-4" />
+                            Save Draft
+                        </button>
+                        <button
+                            onClick={() => createTemplate('save-continue')}
+                            disabled={!canSubmit || saving}
+                            className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white hover:from-indigo-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                        >
+                            <DocumentPlusIcon className="h-4 w-4" />
+                            {saving ? 'Creating...' : 'Create & Continue'}
+                        </button>
+                    </div>
+                </div>
+
+                {/* Quick Actions Bar */}
+                <div className="bg-white rounded-xl shadow-sm ring-1 ring-gray-200 p-4 mb-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setShowTemplateLibrary(!showTemplateLibrary)}
+                                className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-purple-500 to-purple-600 px-3 py-1.5 text-xs font-medium text-white hover:from-purple-600 hover:to-purple-700 transition-all"
+                            >
+                                <BookOpenIcon className="h-4 w-4" />
+                                Template Library
+                            </button>
+                            <button
+                                onClick={() => setShowMergeTags(!showMergeTags)}
+                                className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 transition-all"
+                            >
+                                <TagIcon className="h-4 w-4" />
+                                Merge Tags
+                            </button>
+                            <button
+                                onClick={() => setShowBlocks(!showBlocks)}
+                                className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 transition-all"
+                            >
+                                <PlusIcon className="h-4 w-4" />
+                                Content Blocks
+                            </button>
+                            {mode === 'html' && (
                                 <button
-                                    key={t.key}
-                                    type="button"
-                                    onClick={() => insertToken(mode, t.key, setHtml, setText)}
-                                    className="px-2 py-1 rounded border text-xs hover:bg-gray-50"
-                                    title={t.label}
+                                    onClick={onGeneratePlainText}
+                                    disabled={textifying || !html.trim()}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-gray-700 ring-1 ring-gray-200 hover:bg-gray-50 disabled:opacity-50 transition-all"
                                 >
-                                    {t.key}
+                                    <SparklesIcon className="h-4 w-4" />
+                                    {textifying ? 'Generating...' : 'Generate Plain Text'}
+                                </button>
+                            )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 rounded-lg bg-gray-100 p-1">
+                                <button
+                                    onClick={() => setViewMode('split')}
+                                    className={cx(
+                                        'rounded px-2 py-1 text-xs font-medium transition-all',
+                                        viewMode === 'split' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'
+                                    )}
+                                >
+                                    Split View
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('editor')}
+                                    className={cx(
+                                        'rounded px-2 py-1 text-xs font-medium transition-all',
+                                        viewMode === 'editor' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'
+                                    )}
+                                >
+                                    Editor Only
+                                </button>
+                                <button
+                                    onClick={() => setViewMode('preview')}
+                                    className={cx(
+                                        'rounded px-2 py-1 text-xs font-medium transition-all',
+                                        viewMode === 'preview' ? 'bg-white shadow-sm text-gray-900' : 'text-gray-600 hover:text-gray-900'
+                                    )}
+                                >
+                                    Preview Only
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Template Library Modal */}
+                {showTemplateLibrary && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                        <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[80vh] overflow-y-auto">
+                            <div className="sticky top-0 bg-white border-b px-6 py-4">
+                                <div className="flex items-center justify-between">
+                                    <h2 className="text-lg font-semibold">Choose a Starter Template</h2>
+                                    <button
+                                        onClick={() => setShowTemplateLibrary(false)}
+                                        className="text-gray-400 hover:text-gray-600"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                            </div>
+                            <div className="p-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                                {STARTER_TEMPLATES.map((template) => {
+                                    const Icon = template.icon;
+                                    return (
+                                        <div
+                                            key={template.id}
+                                            onClick={() => loadTemplate(template)}
+                                            className="rounded-lg border border-gray-200 p-4 hover:border-indigo-300 hover:shadow-lg transition-all cursor-pointer group"
+                                        >
+                                            <div className="flex items-center gap-3 mb-2">
+                                                <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white">
+                                                    <Icon className="h-5 w-5" />
+                                                </div>
+                                                <h3 className="font-medium text-gray-900 group-hover:text-indigo-600">{template.name}</h3>
+                                            </div>
+                                            <p className="text-sm text-gray-600">{template.description}</p>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Merge Tags Dropdown */}
+                {showMergeTags && (
+                    <div className="absolute z-40 mt-2 bg-white rounded-lg shadow-lg ring-1 ring-gray-200 p-4 max-w-md">
+                        {MERGE_TAGS.map((category) => (
+                            <div key={category.category} className="mb-4 last:mb-0">
+                                <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                                    {category.category}
+                                </h3>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {category.tags.map((tag) => (
+                                        <button
+                                            key={tag.key}
+                                            onClick={() => {
+                                                insertTag(tag.key);
+                                                setShowMergeTags(false);
+                                            }}
+                                            className="flex items-center gap-2 rounded-lg px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                                        >
+                                            <span>{tag.icon}</span>
+                                            <div>
+                                                <div className="font-medium text-gray-900">{tag.label}</div>
+                                                <div className="text-xs text-gray-500 font-mono">{tag.key}</div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Content Blocks Dropdown */}
+                {showBlocks && (
+                    <div className="absolute z-40 mt-2 bg-white rounded-lg shadow-lg ring-1 ring-gray-200 p-4 max-w-sm">
+                        <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                            Content Blocks
+                        </h3>
+                        <div className="space-y-2">
+                            {CONTENT_BLOCKS.map((block) => (
+                                <button
+                                    key={block.label}
+                                    onClick={() => {
+                                        insertBlock(block);
+                                        setShowBlocks(false);
+                                    }}
+                                    className="w-full flex items-center gap-3 rounded-lg px-3 py-2 text-sm bg-gray-50 hover:bg-gray-100 transition-colors text-left"
+                                >
+                                    <span className="text-lg">{block.icon}</span>
+                                    <span className="font-medium text-gray-900">{block.label}</span>
                                 </button>
                             ))}
                         </div>
                     </div>
+                )}
 
-                    {/* Snippets */}
-                    <div className="ml-auto">
-                        <div className="relative inline-block">
-                            <details>
-                                <summary className="list-none">
-                  <span className="inline-flex items-center px-2 py-1 rounded border text-xs hover:bg-gray-50 cursor-pointer">
-                    <PlusIcon className="h-4 w-4 mr-1" /> Insert snippet
-                  </span>
-                                </summary>
-                                <div className="absolute right-0 z-10 mt-1 w-72 bg-white border rounded shadow">
-                                    {SNIPPETS.map((s) => (
-                                        <button
-                                            key={s.label}
-                                            type="button"
-                                            onClick={() => insertSnippet(mode, s, setHtml, setText)}
-                                            className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                                            title={s.label}
-                                        >
-                                            {s.label}
-                                        </button>
-                                    ))}
-                                </div>
-                            </details>
+                {/* Template Settings */}
+                <div className="bg-white rounded-xl shadow-sm ring-1 ring-gray-200 overflow-hidden mb-6">
+                    <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-3">
+                        <div className="flex items-center gap-2 text-white">
+                            <Cog6ToothIcon className="h-5 w-5" />
+                            <h3 className="text-sm font-semibold uppercase tracking-wider">Template Settings</h3>
                         </div>
                     </div>
-                </div>
-
-                {/* Editor */}
-                {mode === 'html' ? (
-                    <div className="border rounded overflow-hidden">
-                        <div className="px-3 py-2 border-b bg-gray-50 text-sm text-gray-700">HTML editor</div>
-                        <div className="p-0">
-                            {CodeMirror ? (
-                                <CodeMirror value={html} height="420px" onChange={(v: string) => setHtml(v)} />
-                            ) : (
-                                <textarea
-                                    value={html}
-                                    onChange={(e) => setHtml(e.target.value)}
-                                    rows={20}
-                                    className="w-full px-3 py-2 font-mono text-sm outline-none"
-                                    placeholder="Write HTML (with optional <style>...</style>)…"
+                    <div className="p-6">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            <div className="md:col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Template Name <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    value={name}
+                                    onChange={(e) => setName(e.target.value)}
+                                    placeholder="e.g., Monthly Newsletter"
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Template Engine
+                                </label>
+                                <select
+                                    value={engine}
+                                    onChange={(e) => setEngine(e.target.value)}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    <option value="handlebars">Handlebars ({'{{tags}}'})</option>
+                                    <option value="raw">Raw HTML</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Version
+                                </label>
+                                <input
+                                    type="number"
+                                    value={version}
+                                    onChange={(e) => setVersion(e.target.value)}
+                                    placeholder="1"
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => setMode('html')}
+                                        className={cx(
+                                            'inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all',
+                                            mode === 'html'
+                                                ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200'
+                                                : 'text-gray-600 hover:text-gray-900'
+                                        )}
+                                    >
+                                        <CodeBracketIcon className="h-4 w-4" />
+                                        HTML
+                                    </button>
+                                    <button
+                                        onClick={() => setMode('text')}
+                                        className={cx(
+                                            'inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-all',
+                                            mode === 'text'
+                                                ? 'bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200'
+                                                : 'text-gray-600 hover:text-gray-900'
+                                        )}
+                                    >
+                                        <DocumentTextIcon className="h-4 w-4" />
+                                        Plain Text
+                                    </button>
+                                </div>
+
+                                <label className="inline-flex items-center gap-2 text-sm">
+                                    <input
+                                        type="checkbox"
+                                        checked={inlineCss}
+                                        onChange={(e) => setInlineCss(e.target.checked)}
+                                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                    <span className="text-gray-700">Inline CSS for preview</span>
+                                </label>
+
+                                <button
+                                    onClick={() => setShowPreviewData(!showPreviewData)}
+                                    className="inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-gray-600 hover:text-gray-900"
+                                >
+                                    <BeakerIcon className="h-4 w-4" />
+                                    Test Data
+                                </button>
+                            </div>
+
+                            {!hasUnsubscribe && (
+                                <div className="inline-flex items-center gap-2 rounded-lg bg-amber-50 px-3 py-1.5 text-sm text-amber-700">
+                                    <ExclamationTriangleIcon className="h-4 w-4" />
+                                    <span>Consider adding {'{{unsubscribe_url}}'}</span>
+                                </div>
                             )}
                         </div>
                     </div>
-                ) : (
-                    <div className="border rounded overflow-hidden">
-                        <div className="px-3 py-2 border-b bg-gray-50 text-sm text-gray-700">Plain text editor</div>
-                        <textarea
-                            value={text}
-                            onChange={(e) => setText(e.target.value)}
-                            rows={22}
-                            className="w-full px-3 py-2 font-mono text-sm outline-none"
-                            placeholder="Write the plain-text content…"
-                        />
+                </div>
+
+                {/* Preview Data Panel */}
+                {showPreviewData && (
+                    <div className="bg-white rounded-xl shadow-sm ring-1 ring-gray-200 overflow-hidden mb-6">
+                        <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-white">
+                                    <BeakerIcon className="h-5 w-5" />
+                                    <h3 className="text-sm font-semibold uppercase tracking-wider">Test Data (JSON)</h3>
+                                </div>
+                                <button
+                                    onClick={() => setShowPreviewData(false)}
+                                    className="text-white/80 hover:text-white"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+                        <div className="p-0">
+                            <textarea
+                                value={dataJSON}
+                                onChange={(e) => setDataJSON(e.target.value)}
+                                rows={8}
+                                className={cx(
+                                    'w-full px-4 py-3 font-mono text-sm',
+                                    dataErr ? 'bg-red-50 text-red-900' : 'bg-gray-50'
+                                )}
+                                style={{ resize: 'vertical' }}
+                            />
+                            {dataErr && (
+                                <div className="px-4 py-2 bg-red-50 border-t border-red-200 text-sm text-red-600">
+                                    {dataErr}
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
-                {/* Tools */}
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={onGeneratePlainText}
-                        disabled={textifying || mode !== 'html' || !html.trim()}
-                        className="inline-flex items-center px-3 py-1.5 rounded border hover:bg-gray-50 disabled:opacity-60 text-sm"
-                        title="Generate plain text from current HTML"
-                    >
-                        {textifying ? 'Generating…' : 'Generate plain text from HTML'}
-                    </button>
-                    {textifyErr && <span className="text-sm text-red-600">{textifyErr}</span>}
+                {/* Main Content Area */}
+                <div className={cx(
+                    'grid gap-6',
+                    viewMode === 'split' && 'grid-cols-1 lg:grid-cols-2',
+                    viewMode === 'editor' && 'grid-cols-1',
+                    viewMode === 'preview' && 'grid-cols-1'
+                )}>
+                    {/* Editor */}
+                    {viewMode !== 'preview' && (
+                        <div className="bg-white rounded-xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                            <div className="bg-gradient-to-r from-gray-700 to-gray-800 px-6 py-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 text-white">
+                                        <CodeBracketIcon className="h-5 w-5" />
+                                        <h3 className="text-sm font-semibold uppercase tracking-wider">
+                                            {mode === 'html' ? 'HTML Editor' : 'Plain Text Editor'}
+                                        </h3>
+                                    </div>
+                                    {viewMode === 'split' && (
+                                        <button
+                                            onClick={() => setViewMode('editor')}
+                                            className="text-white/60 hover:text-white"
+                                        >
+                                            <ArrowsPointingOutIcon className="h-4 w-4" />
+                                        </button>
+                                    )}
+                                    {viewMode === 'editor' && (
+                                        <button
+                                            onClick={() => setViewMode('split')}
+                                            className="text-white/60 hover:text-white"
+                                        >
+                                            <ArrowsPointingInIcon className="h-4 w-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="h-[600px] overflow-auto">
+                                {mode === 'html' ? (
+                                    CodeMirror ? (
+                                        <CodeMirror
+                                            value={html}
+                                            height="600px"
+                                            onChange={(v: string) => setHtml(v)}
+                                        />
+                                    ) : (
+                                        <textarea
+                                            value={html}
+                                            onChange={(e) => setHtml(e.target.value)}
+                                            className="w-full h-full px-4 py-3 font-mono text-sm border-0 outline-none resize-none"
+                                            placeholder="Start typing your HTML template..."
+                                        />
+                                    )
+                                ) : (
+                                    <textarea
+                                        value={text}
+                                        onChange={(e) => setText(e.target.value)}
+                                        className="w-full h-full px-4 py-3 font-mono text-sm border-0 outline-none resize-none"
+                                        placeholder="Start typing your plain text template..."
+                                    />
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Preview */}
+                    {viewMode !== 'editor' && (
+                        <div className="bg-white rounded-xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                            <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-3">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 text-white">
+                                        <EyeIcon className="h-5 w-5" />
+                                        <h3 className="text-sm font-semibold uppercase tracking-wider">Live Preview</h3>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xs text-indigo-100">
+                                            {engine} · {mode}
+                                        </span>
+                                        {viewMode === 'split' && (
+                                            <button
+                                                onClick={() => setViewMode('preview')}
+                                                className="text-white/60 hover:text-white"
+                                            >
+                                                <ArrowsPointingOutIcon className="h-4 w-4" />
+                                            </button>
+                                        )}
+                                        {viewMode === 'preview' && (
+                                            <button
+                                                onClick={() => setViewMode('split')}
+                                                className="text-white/60 hover:text-white"
+                                            >
+                                                <ArrowsPointingInIcon className="h-4 w-4" />
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            <iframe
+                                title="preview"
+                                className="w-full h-[600px] bg-white"
+                                sandbox="allow-same-origin"
+                                srcDoc={`<!doctype html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head><body style="margin:0">${previewHtml}</body></html>`}
+                            />
+                        </div>
+                    )}
                 </div>
 
-                {/* Preview data (JSON) */}
-                <div className="border rounded overflow-hidden">
-                    <div className="px-3 py-2 border-b bg-gray-50 text-sm text-gray-700">Preview data (JSON)</div>
-                    <textarea
-                        value={dataJSON}
-                        onChange={(e) => setDataJSON(e.target.value)}
-                        rows={10}
-                        className={cx('w-full px-3 py-2 font-mono text-xs outline-none', dataErr ? 'bg-rose-50' : undefined)}
-                    />
-                    {dataErr && <div className="px-3 py-2 text-sm text-red-600 border-t">{dataErr}</div>}
-                </div>
-            </div>
+                {/* Error Messages */}
+                {err && (
+                    <div className="rounded-lg bg-red-50 border border-red-200 p-4">
+                        <div className="flex items-center gap-3">
+                            <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
+                            <p className="text-sm text-red-700">{err}</p>
+                        </div>
+                    </div>
+                )}
 
-            {/* PREVIEW (BOTTOM) */}
-            <div className="border rounded overflow-hidden bg-white">
-                <div className="px-3 py-2 border-b bg-gray-50 text-sm text-gray-700 flex items-center justify-between">
-          <span className="inline-flex items-center">
-            <EyeIcon className="h-4 w-4 mr-1" />
-            Preview
-          </span>
-                    <span className="text-xs text-gray-500">
-            Engine: <span className="font-medium">{engine || 'none'}</span> · Mode: <span className="font-medium">{mode}</span>
-          </span>
-                </div>
-                <iframe
-                    title="preview"
-                    className="w-full h-[720px] bg-white" /* taller since it's the only item on bottom */
-                    sandbox="allow-same-origin"
-                    srcDoc={`<!doctype html><html><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
-<style>body{font-family:ui-sans-serif,system-ui,Segoe UI,Roboto,Helvetica,Arial,Apple Color Emoji,Segoe UI Emoji;margin:16px;color:#111827;}</style>
-</head><body>${previewHtml}</body></html>`}
-                />
-            </div>
-
-            {/* Errors */}
-            {err && <div className="text-sm text-red-600">{err}</div>}
-
-            {/* Footer */}
-            <div className="flex items-center justify-between text-sm text-gray-500">
-                <div>
-                    <span>Fields with </span>
-                    <span className="text-red-600">*</span>
-                    <span> are required.</span>
-                </div>
-                <Link href={backHref} className="hover:text-gray-800">
-                    ← Back to templates
-                </Link>
+                {textifyErr && (
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 p-4">
+                        <div className="flex items-center gap-3">
+                            <ExclamationTriangleIcon className="h-5 w-5 text-amber-600" />
+                            <p className="text-sm text-amber-700">Text generation error: {textifyErr}</p>
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
 }
 
-/* ------------------------- Insert helpers ------------------------- */
-function insertToken(
-    mode: ContentMode,
-    token: string,
-    setHtml: React.Dispatch<React.SetStateAction<string>>,
-    setText: React.Dispatch<React.SetStateAction<string>>,
-) {
-    if (mode === 'html') setHtml((prev) => `${prev}${token}`);
-    else setText((prev) => `${prev}${token}`);
-}
-
-function insertSnippet(
-    mode: ContentMode,
-    snippet: { html: string; text: string },
-    setHtml: React.Dispatch<React.SetStateAction<string>>,
-    setText: React.Dispatch<React.SetStateAction<string>>,
-) {
-    if (mode === 'html') setHtml((prev) => `${prev}${snippet.html}`);
-    else setText((prev) => `${prev}${snippet.text}`);
-}
-
-/* ------------------------- Simple templating ------------------------- */
+/* ------------------------- Utilities ------------------------- */
 
 function substitute<T extends Record<string, unknown>>(input: string, data: T): string {
-    // Handles {{a.b.c}} safely for raw/handlebars preview data
     return input.replace(/{{\s*([a-zA-Z0-9_.]+)\s*}}/g, (_m, path: string) => {
         const val = path.split('.').reduce<unknown>((acc, key) => {
             if (acc !== null && typeof acc === 'object' && key in (acc as Record<string, unknown>)) {

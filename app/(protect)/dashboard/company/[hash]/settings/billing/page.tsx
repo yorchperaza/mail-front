@@ -1,21 +1,30 @@
 'use client';
 
 import React, {
+    FormEvent,
+    forwardRef,
+    Fragment,
     useEffect,
+    useImperativeHandle,
     useMemo,
     useRef,
     useState,
-    forwardRef,
-    useImperativeHandle,
-    Fragment,
-    FormEvent,
 } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import {useParams, useRouter} from 'next/navigation';
 import Link from 'next/link';
-import { Transition } from '@headlessui/react';
-import { ArrowLeftIcon, CheckCircleIcon } from '@heroicons/react/24/outline';
-import { loadStripe } from '@stripe/stripe-js';
-import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
+import {Transition} from '@headlessui/react';
+import {
+    ArrowLeftIcon,
+    BanknotesIcon,
+    CreditCardIcon,
+    DocumentTextIcon,
+    ExclamationTriangleIcon,
+    ShieldCheckIcon,
+    StarIcon
+} from '@heroicons/react/24/outline';
+import {CheckCircleIcon as CheckCircleSolid, CreditCardIcon as CreditCardSolid} from '@heroicons/react/24/solid';
+import {loadStripe} from '@stripe/stripe-js';
+import {Elements, PaymentElement, useElements, useStripe} from '@stripe/react-stripe-js';
 
 /* ------------------------------- Types -------------------------------- */
 
@@ -82,7 +91,7 @@ type CurrentPlan = {
     features?: PlanFeatures;
 };
 
-/** Shape for 402 “payment required” responses we handle. */
+/** Shape for 402 "payment required" responses we handle. */
 type PaymentRequiredPayload = {
     message?: string;
     stripe?: { clientSecret?: string };
@@ -118,9 +127,7 @@ function isPaymentRequiredPayload(v: unknown): v is PaymentRequiredPayload {
     if (typeof v !== 'object' || v === null) return false;
     const obj = v as Record<string, unknown>;
     const stripe = obj.stripe as Record<string, unknown> | undefined;
-    const clientSecretOk =
-        !stripe || typeof stripe.clientSecret === 'string' || typeof stripe.clientSecret === 'undefined';
-    return clientSecretOk;
+    return !stripe || typeof stripe.clientSecret === 'string' || typeof stripe.clientSecret === 'undefined';
 }
 
 /** Detects backend error messages that indicate no PM/source is on file. */
@@ -219,10 +226,14 @@ const StripePayment = forwardRef<StripePaymentHandle, { note?: string }>(functio
     });
 
     return (
-        <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+        <div className="rounded-xl border border-neutral-200 bg-gradient-to-br from-neutral-50 to-white p-4 shadow-sm">
             <PaymentElement options={{ layout: 'accordion' }} />
             {note && <p className="mt-2 text-xs text-neutral-600">{note}</p>}
-            {localError && <p className="mt-2 text-xs text-red-600">{localError}</p>}
+            {localError && (
+                <div className="mt-2 rounded-lg bg-red-50 px-3 py-2">
+                    <p className="text-xs text-red-600">{localError}</p>
+                </div>
+            )}
         </div>
     );
 });
@@ -599,225 +610,287 @@ export default function CompanyBillingPage() {
     /* -------------------------------- UI ---------------------------------- */
 
     return (
-        <div className="p-6 space-y-8">
-            {/* Header */}
-            <div className="flex items-center gap-3">
-                <button
-                    onClick={() => router.back()}
-                    className="inline-flex items-center justify-center h-9 w-9 rounded-full hover:bg-gray-100"
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+            <div className="max-w-7xl mx-auto p-6 space-y-8">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => router.back()}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 transition-all hover:shadow"
+                        >
+                            <ArrowLeftIcon className="h-4 w-4" />
+                            Back
+                        </button>
+                        <div className="h-8 w-px bg-gray-200" />
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">Billing & Plans</h1>
+                            <p className="text-sm text-gray-500">
+                                Manage your subscription and payment methods
+                            </p>
+                        </div>
+                    </div>
+                    <div className="text-sm text-gray-500">
+                        <Link
+                            href={`/dashboard/company/${hash}`}
+                            className="text-blue-600 hover:text-blue-700 font-medium"
+                        >
+                            Company overview →
+                        </Link>
+                    </div>
+                </div>
+
+                {/* Alerts */}
+                <Transition
+                    as={Fragment}
+                    show={!!error || !!success}
+                    enter="transition ease-out duration-200"
+                    enterFrom="opacity-0 -translate-y-1"
+                    enterTo="opacity-100 translate-y-0"
+                    leave="transition ease-in duration-150"
+                    leaveFrom="opacity-100 translate-y-0"
+                    leaveTo="opacity-0 -translate-y-1"
                 >
-                    <ArrowLeftIcon className="h-5 w-5 text-gray-600" />
-                    <span className="sr-only">Back</span>
-                </button>
-                <h1 className="text-3xl font-semibold">Billing</h1>
-                <div className="ml-auto text-sm text-gray-500">
-                    <Link href={`/dashboard/company/${hash}`} className="text-blue-600 hover:text-blue-700">
-                        Company overview →
-                    </Link>
-                </div>
-            </div>
-
-            {/* Alerts */}
-            <Transition
-                as={Fragment}
-                show={!!error || !!success}
-                enter="transition ease-out duration-200"
-                enterFrom="opacity-0 -translate-y-1"
-                enterTo="opacity-100 translate-y-0"
-                leave="transition ease-in duration-150"
-                leaveFrom="opacity-100 translate-y-0"
-                leaveTo="opacity-0 -translate-y-1"
-            >
-                <div className="space-y-2">
-                    {error && <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800">{error}</div>}
-                    {success && (
-                        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-green-800">{success}</div>
-                    )}
-                </div>
-            </Transition>
-
-            {/* Two-column layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* LEFT: Plan picker + features + cancel */}
-                <section className="bg-white rounded-xl border border-neutral-200 shadow-sm p-6">
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold">Plan</h2>
-                        <span className="text-sm text-neutral-600">
-              Current: <span className="font-medium">{currentPlan?.name ?? '—'}</span>
-            </span>
-                    </div>
-
-                    {/* Plan cards */}
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {plansLoading &&
-                            Array.from({ length: 2 }).map((_, i) => (
-                                <div key={i} className="rounded-2xl border border-neutral-200 p-4 animate-pulse">
-                                    <div className="h-5 w-24 bg-neutral-200 rounded mb-3" />
-                                    <div className="h-8 w-32 bg-neutral-200 rounded mb-2" />
-                                    <div className="h-3 w-2/3 bg-neutral-200 rounded" />
+                    <div className="space-y-2">
+                        {error && (
+                            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 shadow-sm">
+                                <div className="flex items-center gap-2">
+                                    <ExclamationTriangleIcon className="h-5 w-5 text-red-500" />
+                                    <p className="text-red-800 font-medium">{error}</p>
                                 </div>
-                            ))}
+                            </div>
+                        )}
+                        {success && (
+                            <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 shadow-sm">
+                                <div className="flex items-center gap-2">
+                                    <CheckCircleSolid className="h-5 w-5 text-green-500" />
+                                    <p className="text-green-800 font-medium">{success}</p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </Transition>
 
-                        {!plansLoading &&
-                            brief.map((p) => {
-                                const d = details[p.id];
-                                const isSelected = selectedPlanId === p.id;
-                                return (
-                                    <button
-                                        key={p.id}
-                                        type="button"
-                                        onClick={() => setSelectedPlanId(p.id)}
-                                        className={`relative text-left rounded-2xl border p-4 transition focus:outline-none focus:ring-2 ${
-                                            isSelected
-                                                ? 'border-blue-600 ring-blue-200 bg-gradient-to-br from-blue-50/70 to-white'
-                                                : 'border-neutral-200 hover:border-neutral-300'
-                                        }`}
-                                    >
-                                        {isSelected && (
-                                            <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-blue-600 px-2 py-0.5 text-[10px] font-semibold text-white">
-                        <CheckCircleIcon className="h-3.5 w-3.5" /> Selected
-                      </span>
-                                        )}
-                                        <div className="flex items-start justify-between gap-3">
-                                            <div>
-                                                <div className="text-sm font-semibold text-neutral-800">{p.name}</div>
-                                                <div className="mt-1 text-2xl font-extrabold">
-                                                    {d ? formatMoney(d.monthlyPrice) : '—'}
-                                                    <span className="text-sm font-semibold text-neutral-500"> /mo</span>
-                                                </div>
-                                                <div className="mt-1 text-xs text-neutral-600">
-                                                    Includes {d ? formatMessages(d.includedMessages) : '—'} messages • Avg ${d?.averagePricePer1K ?? '—'}/1k
-                                                </div>
-                                            </div>
-                                            <div
-                                                aria-hidden
-                                                className={`mt-1 size-5 rounded-full border ${
-                                                    isSelected ? 'border-blue-600 bg-blue-600' : 'border-neutral-300'
-                                                }`}
-                                            />
+                {/* Two-column layout */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                    {/* LEFT: Plan picker + features + cancel */}
+                    <section className="bg-white rounded-xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-white">
+                                    <DocumentTextIcon className="h-5 w-5" />
+                                    <h2 className="text-lg font-semibold">Choose Your Plan</h2>
+                                </div>
+                                <span className="text-sm text-indigo-100">
+                                    Current: <span className="font-medium text-white">{currentPlan?.name ?? '—'}</span>
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {/* Plan cards */}
+                            <div className="grid grid-cols-1 gap-4">
+                                {plansLoading &&
+                                    Array.from({ length: 2 }).map((_, i) => (
+                                        <div key={i} className="rounded-xl border border-neutral-200 p-4 animate-pulse">
+                                            <div className="h-5 w-24 bg-neutral-200 rounded mb-3" />
+                                            <div className="h-8 w-32 bg-neutral-200 rounded mb-2" />
+                                            <div className="h-3 w-2/3 bg-neutral-200 rounded" />
                                         </div>
-                                    </button>
-                                );
-                            })}
-                    </div>
+                                    ))}
 
-                    {/* Selected plan details */}
-                    {selected && (
-                        <div className="mt-4 rounded-2xl border border-neutral-200 bg-white p-4">
-                            <div className="flex items-center justify-between gap-4">
-                                <div className="text-sm font-semibold text-neutral-800">Selected: {selected.name}</div>
-                                <div className="text-sm text-neutral-700">
-                                    {formatMoney(selected.monthlyPrice)} /mo • {formatMessages(selected.includedMessages)} messages
-                                </div>
-                            </div>
-                            <ul className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-neutral-700">
-                                {toFeatureBullets(selected.features).length > 0 ? (
-                                    toFeatureBullets(selected.features).map((f, i) => (
-                                        <li key={i} className="flex gap-2">
-                                            <span className="mt-1 inline-block h-1.5 w-1.5 rounded-full bg-blue-500/70" />
-                                            <span>{f}</span>
-                                        </li>
-                                    ))
-                                ) : (
-                                    <li className="text-neutral-500">No feature details.</li>
-                                )}
-                            </ul>
-                        </div>
-                    )}
-
-                    {/* Plan change form */}
-                    <form onSubmit={handleChangePlan} className="mt-6">
-                        <div className="flex justify-end">
-                            <button
-                                type="submit"
-                                className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
-                                disabled={plansLoading}
-                            >
-                                Update Plan
-                            </button>
-                        </div>
-                    </form>
-
-                    {/* Cancel subscription — period end only (shown for paid plans) */}
-                    {needsPaymentUI && (
-                        <div className="mt-8 border-t pt-6">
-                            <h3 className="text-sm font-semibold text-neutral-800 mb-2">Cancel subscription</h3>
-                            <p className="text-sm text-neutral-600 mb-3">Cancel at the end of the current billing period.</p>
-                            <button
-                                onClick={handleCancelAtPeriodEnd}
-                                className="inline-flex items-center px-3 py-2 rounded-lg border border-neutral-300 hover:bg-neutral-50"
-                            >
-                                Cancel at period end
-                            </button>
-                        </div>
-                    )}
-                </section>
-
-                {/* RIGHT: Payment method management (only for paid plans) */}
-                {needsPaymentUI && (
-                    <section className="bg-white rounded-xl border border-neutral-200 shadow-sm p-6">
-                        <div className="flex items-center justify-between">
-                            <h2 className="text-lg font-semibold">Payment method</h2>
-                            <div className="flex items-center gap-3">
-                                <button
-                                    type="button"
-                                    onClick={openBillingPortal}
-                                    className="text-sm text-neutral-700 hover:text-neutral-900 underline underline-offset-2"
-                                >
-                                    Manage cards (Stripe Portal)
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={initCompanySetupIntent}
-                                    className="text-sm text-blue-600 hover:text-blue-700"
-                                >
-                                    {cardClientSecret ? 'Reset form' : 'Add / change card'}
-                                </button>
-                            </div>
-                        </div>
-
-                        <p className="mt-1 text-sm text-neutral-600">Update the default card used for invoices.</p>
-
-                        <div className="mt-4">
-                            {cardError && <p className="text-sm text-red-600">{cardError}</p>}
-                            {cardLoading && (
-                                <div className="rounded-xl border border-neutral-200 p-4 animate-pulse">
-                                    <div className="h-4 w-40 bg-neutral-200 rounded" />
-                                    <div className="mt-3 h-9 w-full bg-neutral-200 rounded" />
-                                </div>
-                            )}
-
-                            {!cardLoading && stripePromise && cardClientSecret && (
-                                <Elements
-                                    stripe={stripePromise}
-                                    options={{ clientSecret: cardClientSecret, appearance: { theme: 'stripe' } }}
-                                >
-                                    <div className="space-y-4">
-                                        <StripePayment
-                                            ref={stripeConfirmRef}
-                                            note="Your card will be saved for future automatic charges."
-                                        />
-                                        <div className="flex justify-end">
+                                {!plansLoading &&
+                                    brief.map((p) => {
+                                        const d = details[p.id];
+                                        const isSelected = selectedPlanId === p.id;
+                                        const isCurrent = currentPlan?.id === p.id;
+                                        return (
                                             <button
-                                                onClick={handleSaveNewCard}
-                                                className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                                                key={p.id}
+                                                type="button"
+                                                onClick={() => setSelectedPlanId(p.id)}
+                                                className={`relative text-left rounded-xl border p-4 transition-all focus:outline-none focus:ring-2 ${
+                                                    isSelected
+                                                        ? 'border-blue-500 ring-blue-200 bg-gradient-to-br from-blue-50 to-white shadow-lg'
+                                                        : 'border-gray-200 hover:border-gray-300 hover:shadow-sm'
+                                                }`}
                                             >
-                                                Save new payment method
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div className="flex-1">
+                                                        <div className="flex items-center gap-2 mb-2">
+                                                            <div className="text-lg font-bold text-gray-900">{p.name}</div>
+                                                            {isCurrent && (
+                                                                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">
+                                                                    <StarIcon className="h-3 w-3" />
+                                                                    Current
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="text-3xl font-bold text-gray-900">
+                                                            {d ? formatMoney(d.monthlyPrice) : '—'}
+                                                            <span className="text-lg font-medium text-gray-500"> /month</span>
+                                                        </div>
+                                                        <div className="mt-2 text-sm text-gray-600">
+                                                            Includes {d ? formatMessages(d.includedMessages) : '—'} messages • Average ${d?.averagePricePer1K ?? '—'} per 1,000
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-col items-center gap-2">
+                                                        <div
+                                                            className={`h-5 w-5 rounded-full border-2 transition-all ${
+                                                                isSelected
+                                                                    ? 'border-blue-500 bg-blue-500'
+                                                                    : 'border-gray-300'
+                                                            }`}
+                                                        >
+                                                            {isSelected && (
+                                                                <CheckCircleSolid className="h-full w-full text-white" />
+                                                            )}
+                                                        </div>
+                                                        {isSelected && (
+                                                            <span className="text-xs font-medium text-blue-600">
+                                                                Selected
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
                                             </button>
-                                        </div>
+                                        );
+                                    })}
+                            </div>
+
+                            {/* Selected plan details */}
+                            {selected && (
+                                <div className="rounded-xl border border-blue-200 bg-gradient-to-br from-blue-50/50 to-white p-4 shadow-sm">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <ShieldCheckIcon className="h-5 w-5 text-blue-600" />
+                                        <div className="text-lg font-semibold text-blue-900">Plan Details: {selected.name}</div>
                                     </div>
-                                </Elements>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {toFeatureBullets(selected.features).length > 0 ? (
+                                            toFeatureBullets(selected.features).map((f, i) => (
+                                                <div key={i} className="flex items-center gap-2 text-sm text-gray-700">
+                                                    <div className="h-1.5 w-1.5 rounded-full bg-blue-500 flex-shrink-0" />
+                                                    <span>{f}</span>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="text-sm text-gray-500 italic">No feature details available.</div>
+                                        )}
+                                    </div>
+                                </div>
                             )}
 
-                            {!cardLoading && !cardClientSecret && (
-                                <div className="rounded-lg border border-dashed border-neutral-300 p-6 text-sm text-neutral-500">
-                                    Click <span className="font-medium text-neutral-700">Add / change card</span> to open the secure card
-                                    form.
+                            {/* Plan change form */}
+                            <form onSubmit={handleChangePlan} className="border-t pt-6">
+                                <button
+                                    type="submit"
+                                    className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-indigo-600 text-white font-semibold hover:from-indigo-600 hover:to-indigo-700 disabled:opacity-50 transition-all shadow-sm"
+                                    disabled={plansLoading}
+                                >
+                                    <DocumentTextIcon className="h-5 w-5" />
+                                    Update Plan
+                                </button>
+                            </form>
+
+                            {/* Cancel subscription — period end only (shown for paid plans) */}
+                            {needsPaymentUI && (
+                                <div className="border-t pt-6">
+                                    <h3 className="text-lg font-semibold text-gray-900 mb-2">Cancel subscription</h3>
+                                    <p className="text-sm text-gray-600 mb-4">Cancel at the end of the current billing period.</p>
+                                    <button
+                                        onClick={handleCancelAtPeriodEnd}
+                                        className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-red-300 text-red-700 hover:bg-red-50 transition-colors"
+                                    >
+                                        <ExclamationTriangleIcon className="h-4 w-4" />
+                                        Cancel at period end
+                                    </button>
                                 </div>
                             )}
                         </div>
                     </section>
-                )}
+
+                    {/* RIGHT: Payment method management (only for paid plans) */}
+                    {needsPaymentUI && (
+                        <section className="bg-white rounded-xl shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                            <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 px-6 py-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 text-white">
+                                        <CreditCardSolid className="h-5 w-5" />
+                                        <h2 className="text-lg font-semibold">Payment Method</h2>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="p-6 space-y-6">
+                                <p className="text-sm text-gray-600">
+                                    Manage the default payment method used for your subscription charges.
+                                </p>
+
+                                <div className="flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={openBillingPortal}
+                                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors font-medium"
+                                    >
+                                        <BanknotesIcon className="h-4 w-4" />
+                                        Manage in Stripe Portal
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={initCompanySetupIntent}
+                                        className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors font-medium"
+                                    >
+                                        <CreditCardIcon className="h-4 w-4" />
+                                        {cardClientSecret ? 'Reset form' : 'Add / change card'}
+                                    </button>
+                                </div>
+
+                                {cardError && (
+                                    <div className="rounded-lg bg-red-50 border border-red-200 p-3">
+                                        <p className="text-sm text-red-600">{cardError}</p>
+                                    </div>
+                                )}
+
+                                {cardLoading && (
+                                    <div className="rounded-xl border border-neutral-200 p-4 animate-pulse">
+                                        <div className="h-4 w-40 bg-neutral-200 rounded mb-3" />
+                                        <div className="h-9 w-full bg-neutral-200 rounded" />
+                                    </div>
+                                )}
+
+                                {!cardLoading && stripePromise && cardClientSecret && (
+                                    <Elements
+                                        stripe={stripePromise}
+                                        options={{ clientSecret: cardClientSecret, appearance: { theme: 'stripe' } }}
+                                    >
+                                        <div className="space-y-4">
+                                            <StripePayment
+                                                ref={stripeConfirmRef}
+                                                note="Your card will be saved for future automatic charges."
+                                            />
+                                            <button
+                                                onClick={handleSaveNewCard}
+                                                className="w-full inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-emerald-600 text-white font-semibold hover:from-emerald-600 hover:to-emerald-700 transition-all shadow-sm"
+                                            >
+                                                <ShieldCheckIcon className="h-5 w-5" />
+                                                Save payment method
+                                            </button>
+                                        </div>
+                                    </Elements>
+                                )}
+
+                                {!cardLoading && !cardClientSecret && (
+                                    <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 p-8 text-center">
+                                        <CreditCardIcon className="mx-auto h-12 w-12 text-gray-400 mb-3" />
+                                        <p className="text-sm text-gray-600">
+                                            Click <span className="font-medium text-gray-700">Add / change card</span> to open the secure payment form.
+                                        </p>
+                                    </div>
+                                )}
+                            </div>
+                        </section>
+                    )}
+                </div>
             </div>
         </div>
     );
