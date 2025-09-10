@@ -80,11 +80,20 @@ function StatCard({
     );
 }
 
-function ContactCard({ contact, hash, onDelete, isDeleting }: {
+function ContactCard({
+                         contact,
+                         hash,
+                         onDelete,
+                         isDeleting,
+                         isSelected,
+                         onToggleSelect
+                     }: {
     contact: ContactItem;
     hash: string;
     onDelete: (id: number) => void;
     isDeleting: boolean;
+    isSelected: boolean;
+    onToggleSelect: (id: number) => void;
 }) {
     const hasGdpr = !!contact.gdpr_consent_at;
     const statusConfig = {
@@ -95,11 +104,18 @@ function ContactCard({ contact, hash, onDelete, isDeleting }: {
     const status = statusConfig[contact.status as keyof typeof statusConfig] || statusConfig.inactive;
 
     return (
-        <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-indigo-200 transition-all overflow-hidden">
+        <div className={`rounded-xl bg-white shadow-sm ring-1 ${isSelected ? 'ring-indigo-500 ring-2' : 'ring-gray-200'} hover:shadow-lg transition-all overflow-hidden`}>
             <div className={`h-1 ${status.dot}`} />
             <div className="p-4">
                 <div className="flex items-start justify-between mb-3">
                     <div className="flex items-center gap-3">
+                        <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => onToggleSelect(contact.id)}
+                            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            onClick={(e) => e.stopPropagation()}
+                        />
                         <div className="h-10 w-10 rounded-full bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center text-white font-semibold text-sm">
                             {contact.name?.charAt(0).toUpperCase() || contact.email?.charAt(0).toUpperCase() || '?'}
                         </div>
@@ -209,6 +225,8 @@ export default function ContactsListPage() {
     const [loading, setLoading] = useState(true);
     const [err, setErr] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<number | null>(null);
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
     const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -247,6 +265,11 @@ export default function ContactsListPage() {
         return () => { abort = true; };
     }, [listUrl]);
 
+    // Clear selections when page changes
+    useEffect(() => {
+        setSelectedIds(new Set());
+    }, [page]);
+
     function updateQuery(partial: Record<string, unknown>) {
         const sp = new URLSearchParams(search.toString());
         Object.entries(partial).forEach(([k, v]) => {
@@ -276,10 +299,98 @@ export default function ContactsListPage() {
             setData(prev => prev
                 ? { ...prev, items: prev.items.filter(i => i.id !== id), meta: { ...prev.meta, total: prev.meta.total - 1 } }
                 : prev);
+            setSelectedIds(prev => {
+                const next = new Set(prev);
+                next.delete(id);
+                return next;
+            });
         } catch (e) {
             alert(e instanceof Error ? e.message : String(e));
         } finally {
             setDeletingId(null);
+        }
+    }
+
+    async function handleBulkDelete() {
+        const count = selectedIds.size;
+        if (count === 0) return;
+
+        if (!confirm(`Are you sure you want to delete ${count} contact${count > 1 ? 's' : ''}?`)) return;
+
+        setIsBulkDeleting(true);
+        const errors: string[] = [];
+        const deleted: number[] = [];
+
+        // Delete contacts one by one (you might want to implement a bulk delete endpoint)
+        for (const id of selectedIds) {
+            try {
+                const url = `${backend}/companies/${hash}/contacts/${id}`;
+                const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
+                if (!res.ok && res.status !== 204) {
+                    errors.push(`Contact ${id}: ${res.status}`);
+                } else {
+                    deleted.push(id);
+                }
+            } catch (e) {
+                errors.push(`Contact ${id}: ${e instanceof Error ? e.message : String(e)}`);
+            }
+        }
+
+        // Update the data
+        if (deleted.length > 0) {
+            setData(prev => prev
+                ? {
+                    ...prev,
+                    items: prev.items.filter(i => !deleted.includes(i.id)),
+                    meta: { ...prev.meta, total: prev.meta.total - deleted.length }
+                }
+                : prev);
+        }
+
+        // Clear selections
+        setSelectedIds(new Set());
+        setIsBulkDeleting(false);
+
+        // Show results
+        if (errors.length > 0) {
+            alert(`Deleted ${deleted.length} contact(s). Errors:\n${errors.join('\n')}`);
+        } else if (deleted.length > 0) {
+            alert(`Successfully deleted ${deleted.length} contact(s)`);
+        }
+    }
+
+    function toggleSelect(id: number) {
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    }
+
+    function toggleSelectAll() {
+        if (!data) return;
+
+        const allCurrentIds = new Set(data.items.map(item => item.id));
+        const allSelected = data.items.every(item => selectedIds.has(item.id));
+
+        if (allSelected) {
+            // Deselect all on current page
+            setSelectedIds(prev => {
+                const next = new Set(prev);
+                allCurrentIds.forEach(id => next.delete(id));
+                return next;
+            });
+        } else {
+            // Select all on current page
+            setSelectedIds(prev => {
+                const next = new Set(prev);
+                allCurrentIds.forEach(id => next.add(id));
+                return next;
+            });
         }
     }
 
@@ -304,6 +415,10 @@ export default function ContactsListPage() {
             }).length,
         };
     }, [data]);
+
+    // Check if all items on current page are selected
+    const isAllSelected = data ? data.items.length > 0 && data.items.every(item => selectedIds.has(item.id)) : false;
+    const isIndeterminate = data ? data.items.some(item => selectedIds.has(item.id)) && !isAllSelected : false;
 
     // Loading state
     if (loading) {
@@ -367,11 +482,22 @@ export default function ContactsListPage() {
                             <h1 className="text-2xl font-bold text-gray-900">Contacts</h1>
                             <p className="text-sm text-gray-500">
                                 {meta.total.toLocaleString()} total contacts
+                                {selectedIds.size > 0 && ` • ${selectedIds.size} selected`}
                             </p>
                         </div>
                     </div>
 
                     <div className="flex items-center gap-2">
+                        {selectedIds.size > 0 && (
+                            <button
+                                onClick={handleBulkDelete}
+                                disabled={isBulkDeleting}
+                                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-all shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                <TrashIcon className="h-4 w-4" />
+                                {isBulkDeleting ? 'Deleting...' : `Delete (${selectedIds.size})`}
+                            </button>
+                        )}
                         <button
                             onClick={() => setViewMode(viewMode === 'grid' ? 'table' : 'grid')}
                             className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 transition-all"
@@ -526,23 +652,54 @@ export default function ContactsListPage() {
                     </div>
                 ) : viewMode === 'grid' ? (
                     /* Grid View */
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {items.map(contact => (
-                            <ContactCard
-                                key={contact.id}
-                                contact={contact}
-                                hash={hash}
-                                onDelete={handleDelete}
-                                isDeleting={deletingId === contact.id}
-                            />
-                        ))}
-                    </div>
+                    <>
+                        {items.length > 0 && (
+                            <div className="flex items-center gap-3 px-1">
+                                <input
+                                    type="checkbox"
+                                    checked={isAllSelected}
+                                    ref={(el) => {
+                                        if (el) el.indeterminate = isIndeterminate;
+                                    }}
+                                    onChange={toggleSelectAll}
+                                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <span className="text-sm text-gray-700">
+                                    Select all {items.length} contacts on this page
+                                </span>
+                            </div>
+                        )}
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                            {items.map(contact => (
+                                <ContactCard
+                                    key={contact.id}
+                                    contact={contact}
+                                    hash={hash}
+                                    onDelete={handleDelete}
+                                    isDeleting={deletingId === contact.id}
+                                    isSelected={selectedIds.has(contact.id)}
+                                    onToggleSelect={toggleSelect}
+                                />
+                            ))}
+                        </div>
+                    </>
                 ) : (
                     /* Table View */
                     <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
                         <table className="w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
                             <tr>
+                                <th className="px-3 py-3 text-left">
+                                    <input
+                                        type="checkbox"
+                                        checked={isAllSelected}
+                                        ref={(el) => {
+                                            if (el) el.indeterminate = isIndeterminate;
+                                        }}
+                                        onChange={toggleSelectAll}
+                                        className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                    />
+                                </th>
                                 <th className="px-3 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                                     Contact
                                 </th>
@@ -569,9 +726,18 @@ export default function ContactsListPage() {
                                     inactive: { bg: 'bg-gray-50', text: 'text-gray-700', dot: 'bg-gray-500' },
                                 };
                                 const status = statusConfig[contact.status as keyof typeof statusConfig] || statusConfig.inactive;
+                                const isSelected = selectedIds.has(contact.id);
 
                                 return (
-                                    <tr key={contact.id} className="hover:bg-gray-50 transition-colors">
+                                    <tr key={contact.id} className={`${isSelected ? 'bg-indigo-50' : 'hover:bg-gray-50'} transition-colors`}>
+                                        <td className="px-3 py-3">
+                                            <input
+                                                type="checkbox"
+                                                checked={isSelected}
+                                                onChange={() => toggleSelect(contact.id)}
+                                                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                            />
+                                        </td>
                                         <td className="px-3 py-3">
                                             <div className="flex items-center gap-3">
                                                 <div className="flex-shrink-0">
