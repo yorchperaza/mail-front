@@ -51,6 +51,32 @@ type Detail = {
     timestamps: { createdAt: string | null; queuedAt: string | null; sentAt: string | null };
 };
 
+type EventItem = {
+    id: number;
+    type: string;                       // "opened" | "clicked" | "delivered" | "bounced" | ...
+    at: string;                         // ISO datetime
+    recipient: { id: number | null; email: string | null };
+    meta?: Record<string, unknown> | null;
+};
+
+type EventsResponse = {
+    meta: {
+        page: number;
+        perPage: number;
+        total: number;
+        order: 'asc' | 'desc' | string;
+        filters: {
+            type?: string | null;
+            recipient?: string | null;
+            since?: string | null;
+            until?: string | null;
+        };
+    };
+    aggregates: Record<string, number>; // { opened: 10, clicked: 3, ... }
+    items: EventItem[];
+};
+
+
 /* ========================= Helpers ========================= */
 const STATE_CONFIG = {
     sent: {
@@ -202,6 +228,29 @@ export default function MessageByMessageIdPage() {
 
     const token = typeof window !== 'undefined' ? localStorage.getItem('jwt') : null;
     const backend = process.env.NEXT_PUBLIC_BACKEND_URL;
+    // Events state
+    const [events, setEvents] = useState<EventItem[] | null>(null);
+    const [aggs, setAggs] = useState<Record<string, number>>({});
+    const [evLoading, setEvLoading] = useState(true);
+    const [evErr, setEvErr] = useState<string | null>(null);
+
+    // Simple controls (you can expand later)
+    const [evPage, setEvPage] = useState(1);
+    const [evPerPage, setEvPerPage] = useState(25);
+    const [evOrder, setEvOrder] = useState<'asc' | 'desc'>('desc');
+    const [evType, setEvType] = useState<string>('');            // "", "opened", "clicked", ...
+    const [evRecipient, setEvRecipient] = useState<string>('');  // substring
+
+    const eventsUrl = useMemo(() => {
+        const base = `${backend}/companies/${hash}/messages/message-id/${encodeURIComponent(messageId)}/events`;
+        const p = new URLSearchParams();
+        p.set('page', String(evPage));
+        p.set('perPage', String(evPerPage));
+        p.set('order', evOrder);
+        if (evType) p.set('type', evType);
+        if (evRecipient) p.set('recipient', evRecipient.trim());
+        return `${base}?${p.toString()}`;
+    }, [backend, hash, messageId, evPage, evPerPage, evOrder, evType, evRecipient]);
 
     const url = useMemo(
         () => `${backend}/companies/${hash}/messages/message-id/${encodeURIComponent(messageId)}`,
@@ -232,6 +281,36 @@ export default function MessageByMessageIdPage() {
         })();
         return () => { abort = true; };
     }, [url, token]);
+
+    // Fetch events for this message
+    useEffect(() => {
+        let abort = false;
+        (async () => {
+            if (!backend) return;
+            setEvLoading(true);
+            setEvErr(null);
+            try {
+                const res = await fetch(eventsUrl, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+                    },
+                });
+                if (!res.ok) throw new Error(`Failed to load events (${res.status})`);
+                const json: EventsResponse = await res.json();
+                if (!abort) {
+                    setEvents(json.items || []);
+                    setAggs(json.aggregates || {});
+                }
+            } catch (e) {
+                if (!abort) setEvErr(e instanceof Error ? e.message : String(e));
+            } finally {
+                if (!abort) setEvLoading(false);
+            }
+        })();
+        return () => { abort = true; };
+    }, [eventsUrl, token, backend]);
+
 
     /* ===== Loading / Error ===== */
     if (loading) {
@@ -489,6 +568,158 @@ export default function MessageByMessageIdPage() {
                     </div>
                 </div>
 
+                {/* Events & Activity */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="flex items-center justify-between border-b border-gray-200 bg-gradient-to-r from-violet-500 to-fuchsia-600 px-4 py-3">
+                        <h3 className="flex items-center gap-2 text-sm font-semibold text-white">
+                            <ClockIcon className="h-4 w-4" />
+                            EVENTS & ACTIVITY
+                        </h3>
+                        {/* Quick filters */}
+                        <div className="flex items-center gap-2">
+                            <select
+                                value={evType}
+                                onChange={(e) => { setEvPage(1); setEvType(e.target.value); }}
+                                className="rounded-md bg-white/90 text-xs px-2 py-1 font-medium text-gray-700 shadow-sm ring-1 ring-white/40 focus:outline-none"
+                            >
+                                <option value="">All types</option>
+                                <option value="delivered">Delivered</option>
+                                <option value="opened">Opened</option>
+                                <option value="clicked">Clicked</option>
+                                <option value="bounced">Bounced</option>
+                                <option value="unsubscribed">Unsubscribed</option>
+                            </select>
+                            <input
+                                value={evRecipient}
+                                onChange={(e) => { setEvPage(1); setEvRecipient(e.target.value); }}
+                                placeholder="Filter by recipient"
+                                className="rounded-md bg-white/90 text-xs px-2 py-1 font-medium text-gray-700 shadow-sm ring-1 ring-white/40 placeholder:text-gray-400 focus:outline-none"
+                            />
+                            <select
+                                value={evOrder}
+                                onChange={(e) => setEvOrder(e.target.value as 'asc' | 'desc')}
+                                className="rounded-md bg-white/90 text-xs px-2 py-1 font-medium text-gray-700 shadow-sm ring-1 ring-white/40 focus:outline-none"
+                            >
+                                <option value="desc">Newest first</option>
+                                <option value="asc">Oldest first</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="p-4 space-y-4">
+                        {/* Aggregates */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            {Object.keys(aggs).length === 0 && !evLoading && (
+                                <span className="text-xs text-gray-500">No events yet</span>
+                            )}
+                            {Object.entries(aggs).map(([k, v]) => (
+                                <span key={k} className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 ring-1 ring-gray-200">
+          <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+                                    {k}: <span className="font-semibold">{v}</span>
+        </span>
+                            ))}
+                            {evLoading && (
+                                <span className="text-xs text-gray-500">Loading…</span>
+                            )}
+                            {evErr && (
+                                <span className="text-xs text-red-600">Error: {evErr}</span>
+                            )}
+                        </div>
+
+                        {/* Timeline list */}
+                        <div className="rounded-lg border border-gray-200 overflow-hidden">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">When</th>
+                                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
+                                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Recipient</th>
+                                    <th className="px-4 py-2 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Details</th>
+                                </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100 bg-white">
+                                {evLoading && (
+                                    <tr>
+                                        <td className="px-4 py-3 text-sm text-gray-500" colSpan={4}>Loading…</td>
+                                    </tr>
+                                )}
+                                {!evLoading && (!events || events.length === 0) && (
+                                    <tr>
+                                        <td className="px-4 py-6 text-sm text-gray-500 text-center" colSpan={4}>
+                                            No activity to display
+                                        </td>
+                                    </tr>
+                                )}
+                                {(events || []).map((ev) => (
+                                    <tr key={ev.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-4 py-3 text-sm text-gray-700 whitespace-nowrap">
+                                            {toLocale(ev.at)}
+                                        </td>
+                                        <td className="px-4 py-3">
+                <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-800 ring-1 ring-gray-200 capitalize">
+                  {ev.type}
+                </span>
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-gray-700">
+                                            <span className="font-mono">{ev.recipient?.email || '—'}</span>
+                                        </td>
+                                        <td className="px-4 py-3 text-xs text-gray-600">
+                                            {!!ev.meta?.ip && (
+                                                <span className="mr-2">
+    IP: <span className="font-mono">{String(ev.meta.ip)}</span>
+  </span>
+                                            )}
+                                            {!!ev.meta?.referer && (
+                                                <span className="mr-2 truncate">
+    Ref: <span className="font-mono">{String(ev.meta.referer)}</span>
+  </span>
+                                            )}
+                                            {!!ev.meta?.url && (
+                                                <span className="mr-2 truncate">
+    URL: <span className="font-mono">{String(ev.meta.url)}</span>
+  </span>
+                                            )}
+
+                                        </td>
+                                    </tr>
+                                ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        {/* Pagination */}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <button
+                                    onClick={() => setEvPage((p) => Math.max(1, p - 1))}
+                                    className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition disabled:opacity-50"
+                                    disabled={evPage <= 1 || evLoading}
+                                >
+                                    Previous
+                                </button>
+                                <button
+                                    onClick={() => setEvPage((p) => p + 1)}
+                                    className="rounded-lg bg-gray-100 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-200 transition disabled:opacity-50"
+                                    disabled={evLoading || (events !== null && events.length < evPerPage)}
+                                >
+                                    Next
+                                </button>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-500">Rows:</span>
+                                <select
+                                    value={evPerPage}
+                                    onChange={(e) => { setEvPage(1); setEvPerPage(parseInt(e.target.value, 10)); }}
+                                    className="rounded-md bg-white text-xs px-2 py-1 font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 focus:outline-none"
+                                >
+                                    {[10, 25, 50, 100].map((n) => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 {/* Content Tabs */}
                 <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
                     <div className="border-b border-gray-200 bg-gray-50/50">
@@ -522,7 +753,8 @@ export default function MessageByMessageIdPage() {
                                         <iframe
                                             title="HTML preview"
                                             className="h-[600px] w-full bg-white"
-                                            sandbox="allow-same-origin"
+                                            sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+                                            referrerPolicy="no-referrer"
                                             srcDoc={data.html || '<p class="p-4 text-sm text-gray-500">No HTML content available</p>'}
                                         />
                                     </div>
