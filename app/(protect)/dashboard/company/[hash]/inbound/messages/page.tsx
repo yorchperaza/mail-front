@@ -3,8 +3,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
     ResponsiveContainer,
-    LineChart,
-    Line,
+    AreaChart,
+    Area,
     XAxis,
     YAxis,
     CartesianGrid,
@@ -16,7 +16,23 @@ import {
     ArrowLeftIcon,
     MagnifyingGlassIcon,
     XMarkIcon,
+    FunnelIcon,
+    ChartBarIcon,
+    InboxArrowDownIcon,
+    ExclamationTriangleIcon,
+    CheckCircleIcon,
+    XCircleIcon,
+    GlobeAltIcon,
+    CalendarDaysIcon,
+    ChevronDownIcon,
+    ChevronUpIcon,
+    AdjustmentsHorizontalIcon,
+    ClockIcon,
 } from '@heroicons/react/24/outline';
+import {
+    CheckCircleIcon as CheckCircleSolid,
+    XCircleIcon as XCircleSolid,
+} from '@heroicons/react/24/solid';
 
 /* ----------------------------- Types ----------------------------- */
 
@@ -42,9 +58,33 @@ type ApiListResponse<T> = {
 
 /* ----------------------------- Helpers ----------------------------- */
 
-const toLocale = (s?: string | null) => {
+const toLocale = (s?: string | null, format: 'full' | 'short' | 'time' = 'short') => {
     if (!s) return '—';
-    try { return new Date(s).toLocaleString(); } catch { return s; }
+    try {
+        const date = new Date(s);
+        if (format === 'full') {
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+        } else if (format === 'time') {
+            return date.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        return date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    } catch {
+        return s;
+    }
 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -59,6 +99,105 @@ const dayKey = (iso?: string | null): string => {
     const dd = String(d.getDate()).padStart(2, '0');
     return `${y}-${m}-${dd}`;
 };
+
+function getAuthResultConfig(result?: string | null) {
+    const normalized = (result || '').toLowerCase();
+    if (normalized === 'pass') {
+        return {
+            label: 'Pass',
+            icon: CheckCircleSolid,
+            bgClass: 'bg-emerald-50',
+            textClass: 'text-emerald-700',
+            borderClass: 'border-emerald-200',
+        };
+    } else if (normalized === 'fail') {
+        return {
+            label: 'Fail',
+            icon: XCircleSolid,
+            bgClass: 'bg-red-50',
+            textClass: 'text-red-700',
+            borderClass: 'border-red-200',
+        };
+    } else {
+        return {
+            label: result || 'None',
+            icon: ExclamationTriangleIcon,
+            bgClass: 'bg-gray-50',
+            textClass: 'text-gray-700',
+            borderClass: 'border-gray-200',
+        };
+    }
+}
+
+function getSpamScoreConfig(score?: number | null) {
+    if (score === null || score === undefined) {
+        return {
+            label: '—',
+            bgClass: 'bg-gray-50',
+            textClass: 'text-gray-600',
+            borderClass: 'border-gray-200',
+        };
+    }
+    if (score < 3) {
+        return {
+            label: score.toFixed(1),
+            bgClass: 'bg-emerald-50',
+            textClass: 'text-emerald-700',
+            borderClass: 'border-emerald-200',
+        };
+    } else if (score < 5) {
+        return {
+            label: score.toFixed(1),
+            bgClass: 'bg-amber-50',
+            textClass: 'text-amber-700',
+            borderClass: 'border-amber-200',
+        };
+    } else {
+        return {
+            label: score.toFixed(1),
+            bgClass: 'bg-red-50',
+            textClass: 'text-red-700',
+            borderClass: 'border-red-200',
+        };
+    }
+}
+
+function StatCard({ label, value, change, icon, color }: {
+    label: string;
+    value: number | string;
+    change?: number;
+    icon: React.ReactNode;
+    color: 'blue' | 'emerald' | 'amber' | 'red' | 'purple';
+}) {
+    const colors = {
+        blue: 'from-blue-500 to-blue-600',
+        emerald: 'from-emerald-500 to-emerald-600',
+        amber: 'from-amber-500 to-amber-600',
+        red: 'from-red-500 to-red-600',
+        purple: 'from-purple-500 to-purple-600',
+    };
+
+    return (
+        <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+            <div className={`bg-gradient-to-r ${colors[color]} p-3`}>
+                <div className="flex items-center justify-between text-white">
+                    {icon}
+                    <span className="text-xs font-medium uppercase tracking-wider opacity-90">{label}</span>
+                </div>
+            </div>
+            <div className="p-4">
+                <div className="text-2xl font-bold text-gray-900">
+                    {typeof value === 'number' ? value.toLocaleString() : value}
+                </div>
+                {change !== undefined && (
+                    <div className={`mt-1 text-xs ${change >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% from previous
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
 
 /* ----------------------------- Page ----------------------------- */
 
@@ -75,7 +214,7 @@ export default function InboundMessagesListPage() {
     const domainFromUrl  = (search.get('domainId') || '').trim();
     const minSpamFromUrl = (search.get('minSpam') || '').trim();
     const maxSpamFromUrl = (search.get('maxSpam') || '').trim();
-    const fromDateUrl    = (search.get('receivedFrom') || '').trim(); // e.g. 2025-01-31T00:00
+    const fromDateUrl    = (search.get('receivedFrom') || '').trim();
     const toDateUrl      = (search.get('receivedTo') || '').trim();
     const dkimFromUrl    = (search.get('dkim') || '').trim();
     const dmarcFromUrl   = (search.get('dmarc') || '').trim();
@@ -233,21 +372,19 @@ export default function InboundMessagesListPage() {
         });
     }
 
-    // Remove an individual filter via chip X
-    function clearOne(key: 'search'|'domainId'|'minSpam'|'maxSpam'|'receivedFrom'|'receivedTo'|'dkim'|'dmarc'|'arc') {
-        const setters: Record<typeof key, () => void> = {
-            search: () => setSearchTerm(''),
-            domainId: () => setDomainId(''),
-            minSpam: () => setMinSpam(''),
-            maxSpam: () => setMaxSpam(''),
-            receivedFrom: () => setReceivedFrom(''),
-            receivedTo: () => setReceivedTo(''),
-            dkim: () => setDkim(''),
-            dmarc: () => setDmarc(''),
-            arc: () => setArc(''),
-        };
-        setters[key]();
-        updateQuery({ [key]: undefined, page: 1 });
+    function applyQuickRange(days: number) {
+        const now = new Date();
+        const to = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const from = new Date(to);
+        from.setUTCDate(to.getUTCDate() - (days - 1));
+
+        // Convert to datetime-local format
+        const fromStr = from.toISOString().slice(0, 16);
+        const toStr = to.toISOString().slice(0, 16);
+
+        setReceivedFrom(fromStr);
+        setReceivedTo(toStr);
+        updateQuery({ receivedFrom: fromStr, receivedTo: toStr, page: 1 });
     }
 
     const backHref = `/dashboard/company/${hash}`;
@@ -257,383 +394,662 @@ export default function InboundMessagesListPage() {
         const map = new Map<string, number>();
         (data?.items || []).forEach(m => {
             const k = dayKey(m.received_at);
-            map.set(k, (map.get(k) || 0) + 1);
+            if (k !== 'unknown') {
+                map.set(k, (map.get(k) || 0) + 1);
+            }
         });
         const arr = Array.from(map.entries())
-            .filter(([k]) => k !== 'unknown')
             .sort((a, b) => (a[0] < b[0] ? -1 : 1))
             .map(([date, count]) => ({ date, count }));
         return arr;
     }, [data]);
 
+    // Calculate stats
+    const stats = useMemo(() => {
+        const items = data?.items || [];
+        let passCount = 0;
+        let failCount = 0;
+        let highSpamCount = 0;
+
+        items.forEach(m => {
+            if (m.dkim_result?.toLowerCase() === 'pass') passCount++;
+            if (m.dmarc_result?.toLowerCase() === 'pass') passCount++;
+            if (m.dkim_result?.toLowerCase() === 'fail') failCount++;
+            if (m.dmarc_result?.toLowerCase() === 'fail') failCount++;
+            if ((m.spam_score || 0) >= 5) highSpamCount++;
+        });
+
+        return {
+            total: data?.meta.total || 0,
+            authPass: passCount,
+            authFail: failCount,
+            highSpam: highSpamCount,
+        };
+    }, [data]);
+
     /* ----------------------------- Render ----------------------------- */
 
-    if (loading) return <p className="p-6 text-center text-gray-600">Loading inbound messages…</p>;
-    if (err) return (
-        <div className="p-6 text-center">
-            <p className="text-red-600">{err}</p>
-            <button onClick={() => router.push(backHref)} className="mt-3 inline-flex items-center px-3 py-2 rounded border">
-                <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back
-            </button>
-        </div>
-    );
+    if (loading) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+                <div className="max-w-7xl mx-auto p-6">
+                    <div className="animate-pulse space-y-6">
+                        <div className="h-12 w-64 rounded-lg bg-gray-200" />
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={i} className="h-32 rounded-xl bg-gray-200" />
+                            ))}
+                        </div>
+                        <div className="h-96 rounded-xl bg-gray-200" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    if (err) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
+                <div className="rounded-xl bg-white p-8 shadow-lg max-w-md w-full">
+                    <div className="flex items-center gap-3 text-red-600 mb-2">
+                        <ExclamationTriangleIcon className="h-6 w-6" />
+                        <h2 className="text-lg font-semibold">Error Loading Messages</h2>
+                    </div>
+                    <p className="text-gray-600">{err}</p>
+                    <button
+                        onClick={() => router.push(backHref)}
+                        className="mt-4 w-full rounded-lg bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 transition-colors"
+                    >
+                        Back to Dashboard
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     if (!data) return null;
 
     const { items, meta } = data;
 
-    // Active filter chips (computed from current controlled inputs)
-    const chips: Array<{ key: Parameters<typeof clearOne>[0]; label: string }> = [];
-    if (searchTerm)   chips.push({ key: 'search', label: `Search: ${searchTerm}` });
-    if (domainId)     chips.push({ key: 'domainId', label: `Domain: ${domains.find(d => String(d.id) === domainId)?.domain ?? '#' + domainId}` });
-    if (minSpam)      chips.push({ key: 'minSpam', label: `Min spam: ${minSpam}` });
-    if (maxSpam)      chips.push({ key: 'maxSpam', label: `Max spam: ${maxSpam}` });
-    if (receivedFrom) chips.push({ key: 'receivedFrom', label: `From: ${receivedFrom}` });
-    if (receivedTo)   chips.push({ key: 'receivedTo', label: `To: ${receivedTo}` });
-    if (dkim)         chips.push({ key: 'dkim', label: `DKIM: ${dkim}` });
-    if (dmarc)        chips.push({ key: 'dmarc', label: `DMARC: ${dmarc}` });
-    if (arc)          chips.push({ key: 'arc', label: `ARC: ${arc}` });
+    // Active filter chips
+    const chips: Array<{ key: string; label: string }> = [];
+    if (searchTerm) chips.push({ key: 'search', label: `Search: ${searchTerm}` });
+    if (domainId) chips.push({ key: 'domainId', label: `Domain: ${domains.find(d => String(d.id) === domainId)?.domain ?? '#' + domainId}` });
+    if (minSpam) chips.push({ key: 'minSpam', label: `Min spam: ${minSpam}` });
+    if (maxSpam) chips.push({ key: 'maxSpam', label: `Max spam: ${maxSpam}` });
+    if (receivedFrom) chips.push({ key: 'receivedFrom', label: `From: ${new Date(receivedFrom).toLocaleDateString()}` });
+    if (receivedTo) chips.push({ key: 'receivedTo', label: `To: ${new Date(receivedTo).toLocaleDateString()}` });
+    if (dkim) chips.push({ key: 'dkim', label: `DKIM: ${dkim}` });
+    if (dmarc) chips.push({ key: 'dmarc', label: `DMARC: ${dmarc}` });
+    if (arc) chips.push({ key: 'arc', label: `ARC: ${arc}` });
 
     return (
-        <div className="max-w-7xl mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-3">
-                <button
-                    onClick={() => router.push(backHref)}
-                    className="inline-flex items-center text-gray-600 hover:text-gray-800"
-                >
-                    <ArrowLeftIcon className="h-5 w-5 mr-1" /> Back
-                </button>
-                <h1 className="text-2xl font-semibold">Inbound Messages</h1>
-                <div /> {/* balance */}
-            </div>
-
-            {/* Line chart card (Recharts) */}
-            <div className="bg-white border rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium">Volume over time</p>
-                    <p className="text-xs text-gray-500">
-                        Showing {items.length} of {meta.total} messages (current page with filters)
-                    </p>
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+            <div className="max-w-7xl mx-auto p-6 space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => router.push(backHref)}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 transition-all hover:shadow"
+                        >
+                            <ArrowLeftIcon className="h-4 w-4" />
+                            Back to Dashboard
+                        </button>
+                        <div className="h-8 w-px bg-gray-200" />
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">Inbound Messages</h1>
+                            <p className="text-sm text-gray-500">
+                                {meta.total.toLocaleString()} total messages received
+                            </p>
+                        </div>
+                    </div>
                 </div>
 
-                <div className="h-52 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={chartPoints} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis
-                                dataKey="date"
-                                tick={{ fontSize: 11, fill: '#6b7280' }}
-                                tickMargin={8}
-                                minTickGap={24}
-                            />
-                            <YAxis
-                                allowDecimals={false}
-                                tick={{ fontSize: 11, fill: '#6b7280' }}
-                                width={32}
-                            />
-                            <Tooltip
-                                formatter={(value) => [String(value), 'Messages']}
-                                labelFormatter={(label) => `Date: ${label}`}
-                                contentStyle={{ fontSize: 12 }}
-                            />
-                            <Line
-                                type="monotone"
-                                dataKey="count"
-                                stroke="#2563eb"
-                                strokeWidth={2}
-                                dot={{ r: 3 }}
-                                activeDot={{ r: 5 }}
-                            />
-                            {/* Optional mini scrubber to explore long ranges */}
-                            <Brush dataKey="date" height={20} stroke="#9ca3af" travellerWidth={8} />
-                        </LineChart>
-                    </ResponsiveContainer>
+                {/* Stats Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <StatCard
+                        label="Total Messages"
+                        value={stats.total}
+                        icon={<InboxArrowDownIcon className="h-5 w-5" />}
+                        color="blue"
+                    />
+                    <StatCard
+                        label="Auth Passed"
+                        value={stats.authPass}
+                        icon={<CheckCircleIcon className="h-5 w-5" />}
+                        color="emerald"
+                    />
+                    <StatCard
+                        label="Auth Failed"
+                        value={stats.authFail}
+                        icon={<XCircleIcon className="h-5 w-5" />}
+                        color="red"
+                    />
+                    <StatCard
+                        label="High Spam Score"
+                        value={stats.highSpam}
+                        icon={<ExclamationTriangleIcon className="h-5 w-5" />}
+                        color="amber"
+                    />
                 </div>
 
-                {/* Inline legend-style chips for quick read */}
-                <div className="mt-2 flex gap-3 flex-wrap text-xs text-gray-500">
-                    {chartPoints.length === 0 ? (
-                        <span>No data</span>
-                    ) : (
-                        chartPoints.map((p) => (
-                            <span key={p.date} className="inline-flex items-center gap-1">
-          <span className="inline-block w-2 h-2 rounded-full" style={{ background: '#2563eb' }} />
-                                {p.date}: {p.count}
-        </span>
-                        ))
-                    )}
-                </div>
-            </div>
+                {/* Chart */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-white">
+                                <ChartBarIcon className="h-5 w-5" />
+                                <h3 className="text-sm font-semibold uppercase tracking-wider">
+                                    Message Volume Over Time
+                                </h3>
+                            </div>
+                            <div className="text-xs text-indigo-100">
+                                {chartPoints.length} days with data
+                            </div>
+                        </div>
+                    </div>
 
-            {/* Filters Card */}
-            <form onSubmit={onSubmitSearch} className="bg-white border rounded-lg p-4 space-y-4">
-                {/* Quick Filters Row */}
-                <div className="grid gap-3 md:grid-cols-12">
-                    {/* Search */}
-                    <div className="md:col-span-6 relative">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Search</label>
-                        <MagnifyingGlassIcon className="h-5 w-5 text-gray-400 absolute left-2 top-9 -translate-y-1/2" />
-                        <input
-                            name="search"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="Subject, from address, MIME ref…"
-                            className="w-full pl-9 pr-9 py-2 rounded border border-gray-300"
-                        />
-                        {searchTerm && (
+                    <div className="p-6">
+                        <ResponsiveContainer width="100%" height={280}>
+                            <AreaChart data={chartPoints} margin={{ top: 10, right: 30, left: 0, bottom: 30 }}>
+                                <defs>
+                                    <linearGradient id="colorMessages" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="#6366f1" stopOpacity={0.05}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                <XAxis
+                                    dataKey="date"
+                                    tick={{ fontSize: 11, fill: '#6b7280' }}
+                                    tickMargin={10}
+                                />
+                                <YAxis
+                                    tick={{ fontSize: 11, fill: '#6b7280' }}
+                                    tickMargin={10}
+                                />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: '#fff',
+                                        border: '1px solid #e5e7eb',
+                                        borderRadius: '8px',
+                                        fontSize: '12px'
+                                    }}
+                                />
+                                <Area
+                                    type="monotone"
+                                    dataKey="count"
+                                    stroke="#6366f1"
+                                    strokeWidth={2}
+                                    fill="url(#colorMessages)"
+                                />
+                                <Brush
+                                    dataKey="date"
+                                    height={25}
+                                    stroke="#9ca3af"
+                                    fill="#f9fafb"
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
+                </div>
+
+                {/* Filters */}
+                <form onSubmit={onSubmitSearch} className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-white">
+                                <FunnelIcon className="h-5 w-5" />
+                                <h3 className="text-sm font-semibold uppercase tracking-wider">Filters</h3>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-purple-100">
+                                    {chips.length} active
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                        {/* Quick Actions */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-gray-700">Quick Ranges:</span>
+                            {[
+                                { label: 'Today', days: 1, icon: <CalendarDaysIcon className="h-3.5 w-3.5" /> },
+                                { label: 'Last 7 Days', days: 7 },
+                                { label: 'Last 30 Days', days: 30 },
+                                { label: 'Last 90 Days', days: 90 },
+                            ].map(({ label, days, icon }) => (
+                                <button
+                                    key={days}
+                                    type="button"
+                                    onClick={() => applyQuickRange(days)}
+                                    className="inline-flex items-center gap-1.5 rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+                                >
+                                    {icon}
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Main Filters Grid */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {/* Search */}
+                            <div className="relative">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <MagnifyingGlassIcon className="inline h-4 w-4 mr-1" />
+                                    Search
+                                </label>
+                                <input
+                                    name="search"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    placeholder="Subject, from address, MIME ref…"
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 pr-8"
+                                />
+                                {searchTerm && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSearchTerm('')}
+                                        className="absolute right-2 top-1/2 translate-y-1 p-1 rounded hover:bg-gray-100"
+                                    >
+                                        <XMarkIcon className="h-4 w-4 text-gray-500" />
+                                    </button>
+                                )}
+                            </div>
+
+                            {/* Domain */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <GlobeAltIcon className="inline h-4 w-4 mr-1" />
+                                    Domain
+                                </label>
+                                <select
+                                    value={domainId}
+                                    onChange={(e) => setDomainId(e.target.value)}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    <option value="">All domains</option>
+                                    {domains.map(d => (
+                                        <option key={d.id} value={d.id}>{d.domain ?? `#${d.id}`}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            {/* Per page */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Results per page
+                                </label>
+                                <select
+                                    value={perPage}
+                                    onChange={(e) => updateQuery({ perPage: e.target.value, page: 1 })}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    {[10, 25, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Active filter chips */}
+                        {chips.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {chips.map(c => (
+                                    <span
+                                        key={c.key}
+                                        className="inline-flex items-center gap-1.5 rounded-full bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700 ring-1 ring-purple-200"
+                                    >
+                                        {c.label}
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const updates: Record<string, string | number | undefined> = { [c.key]: undefined, page: 1 };
+                                                updateQuery(updates);
+                                                // Reset the local state for this field
+                                                if (c.key === 'search') setSearchTerm('');
+                                                if (c.key === 'domainId') setDomainId('');
+                                                if (c.key === 'minSpam') setMinSpam('');
+                                                if (c.key === 'maxSpam') setMaxSpam('');
+                                                if (c.key === 'receivedFrom') setReceivedFrom('');
+                                                if (c.key === 'receivedTo') setReceivedTo('');
+                                                if (c.key === 'dkim') setDkim('');
+                                                if (c.key === 'dmarc') setDmarc('');
+                                                if (c.key === 'arc') setArc('');
+                                            }}
+                                            className="rounded-full hover:bg-purple-200 p-0.5 transition-colors"
+                                        >
+                                            <XMarkIcon className="h-3 w-3" />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Advanced Filters */}
+                        <div className="rounded-lg border border-gray-200 bg-gray-50/50">
                             <button
                                 type="button"
-                                onClick={() => setSearchTerm('')}
-                                className="absolute right-2 top-9 -translate-y-1/2 p-1 rounded hover:bg-gray-100"
-                                aria-label="Clear search"
-                                title="Clear search"
+                                onClick={() => setShowAdvanced(!showAdvanced)}
+                                className="w-full flex items-center justify-between px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
                             >
-                                <XMarkIcon className="h-4 w-4 text-gray-500" />
+                                <div className="flex items-center gap-2">
+                                    <AdjustmentsHorizontalIcon className="h-4 w-4" />
+                                    Advanced Filters
+                                </div>
+                                {showAdvanced ? (
+                                    <ChevronUpIcon className="h-4 w-4" />
+                                ) : (
+                                    <ChevronDownIcon className="h-4 w-4" />
+                                )}
                             </button>
-                        )}
-                    </div>
 
-                    {/* Domain */}
-                    <div className="md:col-span-3">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Domain</label>
-                        <select
-                            value={domainId}
-                            onChange={(e) => setDomainId(e.target.value)}
-                            className="w-full rounded border border-gray-300 px-2 py-2"
-                        >
-                            <option value="">All</option>
-                            {domains.map(d => (
-                                <option key={d.id} value={d.id}>{d.domain ?? `#${d.id}`}</option>
-                            ))}
-                        </select>
-                    </div>
+                            {showAdvanced && (
+                                <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-gray-200">
+                                    {/* Spam Score Range */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Spam Score Range
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input
+                                                value={minSpam}
+                                                onChange={(e) => setMinSpam(e.target.value)}
+                                                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                placeholder="Min"
+                                                type="number"
+                                                step="0.1"
+                                            />
+                                            <input
+                                                value={maxSpam}
+                                                onChange={(e) => setMaxSpam(e.target.value)}
+                                                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                                placeholder="Max"
+                                                type="number"
+                                                step="0.1"
+                                            />
+                                        </div>
+                                    </div>
 
-                    {/* Per page */}
-                    <div className="md:col-span-3">
-                        <label className="block text-xs font-medium text-gray-700 mb-1">Per page</label>
-                        <select
-                            value={perPage}
-                            onChange={(e) => updateQuery({ perPage: e.target.value, page: 1 })}
-                            className="w-full rounded border border-gray-300 px-2 py-2"
-                        >
-                            {[10, 25, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
-                        </select>
+                                    {/* Date Range */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Received Date Range
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <input
+                                                type="datetime-local"
+                                                value={receivedFrom}
+                                                onChange={(e) => setReceivedFrom(e.target.value)}
+                                                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                            />
+                                            <input
+                                                type="datetime-local"
+                                                value={receivedTo}
+                                                onChange={(e) => setReceivedTo(e.target.value)}
+                                                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Authentication Results */}
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                                            Authentication Results
+                                        </label>
+                                        <div className="grid grid-cols-3 gap-2">
+                                            <select
+                                                value={dkim}
+                                                onChange={(e) => setDkim(e.target.value)}
+                                                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs"
+                                                title="DKIM"
+                                            >
+                                                <option value="">DKIM: Any</option>
+                                                <option value="pass">DKIM: Pass</option>
+                                                <option value="fail">DKIM: Fail</option>
+                                                <option value="none">DKIM: None</option>
+                                            </select>
+
+                                            <select
+                                                value={dmarc}
+                                                onChange={(e) => setDmarc(e.target.value)}
+                                                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs"
+                                                title="DMARC"
+                                            >
+                                                <option value="">DMARC: Any</option>
+                                                <option value="pass">DMARC: Pass</option>
+                                                <option value="fail">DMARC: Fail</option>
+                                                <option value="none">DMARC: None</option>
+                                            </select>
+
+                                            <select
+                                                value={arc}
+                                                onChange={(e) => setArc(e.target.value)}
+                                                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 text-xs"
+                                                title="ARC"
+                                            >
+                                                <option value="">ARC: Any</option>
+                                                <option value="pass">ARC: Pass</option>
+                                                <option value="fail">ARC: Fail</option>
+                                                <option value="none">ARC: None</option>
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center justify-between pt-4 border-t border-gray-200">
+                            <div className="text-sm text-gray-600">
+                                Showing {items.length} of {meta.total.toLocaleString()} results
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <button
+                                    type="button"
+                                    onClick={clearFilters}
+                                    className="inline-flex items-center gap-2 rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200 transition-colors"
+                                >
+                                    Clear All
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white hover:from-indigo-600 hover:to-indigo-700 transition-all shadow-sm"
+                                >
+                                    <MagnifyingGlassIcon className="h-4 w-4" />
+                                    Apply Filters
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+
+                {/* Messages Table */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                            <tr>
+                                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    From
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Subject
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Spam Score
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    DKIM
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    DMARC
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    ARC
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Domain
+                                </th>
+                                <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                    Received
+                                </th>
+                            </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                            {items.length === 0 ? (
+                                <tr>
+                                    <td className="px-4 py-12 text-center text-gray-500" colSpan={8}>
+                                        <InboxArrowDownIcon className="mx-auto h-12 w-12 text-gray-400 mb-3" />
+                                        <p className="text-sm font-medium">No inbound messages found</p>
+                                        <p className="text-xs text-gray-400 mt-1">Try adjusting your filters</p>
+                                    </td>
+                                </tr>
+                            ) : (
+                                items.map((m) => {
+                                    const spamConfig = getSpamScoreConfig(m.spam_score);
+                                    const dkimConfig = getAuthResultConfig(m.dkim_result);
+                                    const dmarcConfig = getAuthResultConfig(m.dmarc_result);
+                                    const arcConfig = getAuthResultConfig(m.arc_result);
+
+                                    return (
+                                        <tr
+                                            key={m.id}
+                                            className="hover:bg-gray-50 transition-colors cursor-pointer"
+                                            onClick={() => router.push(`/dashboard/company/${hash}/inbound-messages/${m.id}`)}
+                                        >
+                                            <td className="px-4 py-3">
+                                                <div className="text-sm text-gray-900 font-mono">
+                                                    {m.from_email || '—'}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="text-sm font-medium text-gray-900 max-w-xs truncate">
+                                                    {m.subject || <span className="text-gray-400 italic">No Subject</span>}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                    <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${spamConfig.bgClass} ${spamConfig.textClass} border ${spamConfig.borderClass}`}>
+                                                        {spamConfig.label}
+                                                    </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${dkimConfig.bgClass} ${dkimConfig.textClass}`}>
+                                                        <dkimConfig.icon className="h-3 w-3" />
+                                                        {dkimConfig.label}
+                                                    </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${dmarcConfig.bgClass} ${dmarcConfig.textClass}`}>
+                                                        <dmarcConfig.icon className="h-3 w-3" />
+                                                        {dmarcConfig.label}
+                                                    </span>
+                                            </td>
+                                            <td className="px-4 py-3 whitespace-nowrap">
+                                                    <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium ${arcConfig.bgClass} ${arcConfig.textClass}`}>
+                                                        <arcConfig.icon className="h-3 w-3" />
+                                                        {arcConfig.label}
+                                                    </span>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {m.domain ? (
+                                                    <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700 ring-1 ring-inset ring-blue-700/10">
+                                                            {m.domain.domain || `#${m.domain.id}`}
+                                                        </span>
+                                                ) : (
+                                                    <span className="text-gray-400">—</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 text-xs text-gray-500">
+                                                <div className="flex items-center gap-1">
+                                                    <ClockIcon className="h-3.5 w-3.5" />
+                                                    {toLocale(m.received_at, 'short')}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                            </tbody>
+                        </table>
                     </div>
                 </div>
 
-                {/* Active filter chips */}
-                {chips.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                        {chips.map(c => (
-                            <span
-                                key={c.key}
-                                className="inline-flex items-center gap-2 rounded-full border bg-gray-50 px-3 py-1 text-xs"
-                            >
-                {c.label}
-                                <button
-                                    type="button"
-                                    onClick={() => clearOne(c.key)}
-                                    className="rounded-full hover:bg-gray-200 p-0.5"
-                                    aria-label={`Clear ${c.key}`}
-                                    title={`Clear ${c.key}`}
-                                >
-                  <XMarkIcon className="h-3.5 w-3.5 text-gray-600" />
-                </button>
-              </span>
-                        ))}
+                {/* Pagination */}
+                <div className="flex items-center justify-between rounded-xl bg-white shadow-sm ring-1 ring-gray-200 px-6 py-4">
+                    <div className="text-sm text-gray-700">
+                        Showing <span className="font-semibold">{((meta.page - 1) * meta.perPage) + 1}</span> to{' '}
+                        <span className="font-semibold">{Math.min(meta.page * meta.perPage, meta.total)}</span> of{' '}
+                        <span className="font-semibold">{meta.total.toLocaleString()}</span> results
                     </div>
-                )}
-
-                {/* Advanced toggle */}
-                <div className="flex items-center justify-between">
-                    <button
-                        type="button"
-                        onClick={() => setShowAdvanced(v => !v)}
-                        className="text-sm text-blue-700 hover:underline"
-                    >
-                        {showAdvanced ? 'Hide advanced filters' : 'Show advanced filters'}
-                    </button>
 
                     <div className="flex items-center gap-2">
                         <button
-                            type="button"
-                            onClick={clearFilters}
-                            className="px-3 py-2 rounded border text-sm hover:bg-gray-50"
+                            onClick={() => updateQuery({ page: Math.max(1, meta.page - 1) })}
+                            disabled={meta.page <= 1}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
-                            Clear all
+                            <ArrowLeftIcon className="h-4 w-4" />
+                            Previous
                         </button>
+
+                        <div className="flex items-center gap-1">
+                            {Array.from({ length: Math.min(5, meta.totalPages) }, (_, i) => {
+                                const pageNum = i + 1;
+                                const isActive = pageNum === meta.page;
+
+                                return (
+                                    <button
+                                        key={pageNum}
+                                        onClick={() => updateQuery({ page: pageNum })}
+                                        className={`h-8 w-8 rounded-lg text-sm font-medium transition-all ${
+                                            isActive
+                                                ? 'bg-indigo-500 text-white shadow-sm'
+                                                : 'bg-white text-gray-700 hover:bg-gray-50 ring-1 ring-gray-200'
+                                        }`}
+                                    >
+                                        {pageNum}
+                                    </button>
+                                );
+                            })}
+                            {meta.totalPages > 5 && (
+                                <>
+                                    <span className="px-2 text-gray-400">...</span>
+                                    <button
+                                        onClick={() => updateQuery({ page: meta.totalPages })}
+                                        className={`h-8 px-2 rounded-lg text-sm font-medium transition-all ${
+                                            meta.page === meta.totalPages
+                                                ? 'bg-indigo-500 text-white shadow-sm'
+                                                : 'bg-white text-gray-700 hover:bg-gray-50 ring-1 ring-gray-200'
+                                        }`}
+                                    >
+                                        {meta.totalPages}
+                                    </button>
+                                </>
+                            )}
+                        </div>
+
                         <button
-                            type="submit"
-                            className="px-3 py-2 rounded border bg-gray-50 hover:bg-gray-100 text-sm"
+                            onClick={() => updateQuery({ page: Math.min(meta.totalPages, meta.page + 1) })}
+                            disabled={meta.page >= meta.totalPages}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                         >
-                            Apply
+                            Next
+                            <ArrowLeftIcon className="h-4 w-4 rotate-180" />
                         </button>
                     </div>
                 </div>
 
-                {/* Advanced Filters */}
-                {showAdvanced && (
-                    <div className="rounded-lg border bg-gray-50 p-3">
-                        <div className="grid gap-3 md:grid-cols-12">
-                            {/* Spam range */}
-                            <fieldset className="md:col-span-4">
-                                <legend className="text-xs font-medium text-gray-700 mb-2">Spam score</legend>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <input
-                                        value={minSpam}
-                                        onChange={(e) => setMinSpam(e.target.value)}
-                                        className="w-full rounded border border-gray-300 px-2 py-2"
-                                        inputMode="decimal"
-                                        placeholder="Min (e.g. 2.5)"
-                                    />
-                                    <input
-                                        value={maxSpam}
-                                        onChange={(e) => setMaxSpam(e.target.value)}
-                                        className="w-full rounded border border-gray-300 px-2 py-2"
-                                        inputMode="decimal"
-                                        placeholder="Max (e.g. 5.0)"
-                                    />
-                                </div>
-                            </fieldset>
-
-                            {/* Received range */}
-                            <fieldset className="md:col-span-5">
-                                <legend className="text-xs font-medium text-gray-700 mb-2">Received between</legend>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <input
-                                        type="datetime-local"
-                                        value={receivedFrom}
-                                        onChange={(e) => setReceivedFrom(e.target.value)}
-                                        className="w-full rounded border border-gray-300 px-2 py-2"
-                                    />
-                                    <input
-                                        type="datetime-local"
-                                        value={receivedTo}
-                                        onChange={(e) => setReceivedTo(e.target.value)}
-                                        className="w-full rounded border border-gray-300 px-2 py-2"
-                                    />
-                                </div>
-                            </fieldset>
-
-                            {/* Auth results */}
-                            {/* Auth results */}
-                            <fieldset className="md:col-span-3">
-                                <legend className="text-xs font-medium text-gray-700 mb-2">Authentication</legend>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {/* DKIM */}
-                                    <select
-                                        value={dkim}
-                                        onChange={(e) => setDkim(e.target.value)}
-                                        className="w-full rounded border border-gray-300 px-2 py-2 text-sm"
-                                    >
-                                        <option value="">Any</option>
-                                        <option value="pass">Pass</option>
-                                        <option value="fail">Fail</option>
-                                        <option value="none">None</option>
-                                    </select>
-
-                                    {/* DMARC */}
-                                    <select
-                                        value={dmarc}
-                                        onChange={(e) => setDmarc(e.target.value)}
-                                        className="w-full rounded border border-gray-300 px-2 py-2 text-sm"
-                                    >
-                                        <option value="">Any</option>
-                                        <option value="pass">Pass</option>
-                                        <option value="fail">Fail</option>
-                                        <option value="none">None</option>
-                                    </select>
-
-                                    {/* ARC */}
-                                    <select
-                                        value={arc}
-                                        onChange={(e) => setArc(e.target.value)}
-                                        className="w-full rounded border border-gray-300 px-2 py-2 text-sm"
-                                    >
-                                        <option value="">Any</option>
-                                        <option value="pass">Pass</option>
-                                        <option value="fail">Fail</option>
-                                        <option value="none">None</option>
-                                    </select>
-                                </div>
-                            </fieldset>
-
+                {/* Domain Error */}
+                {domainsErr && (
+                    <div className="rounded-xl bg-amber-50 border border-amber-200 p-4">
+                        <div className="flex items-center gap-2">
+                            <ExclamationTriangleIcon className="h-5 w-5 text-amber-600" />
+                            <p className="text-sm text-amber-800">{domainsErr}</p>
                         </div>
                     </div>
                 )}
-            </form>
-
-            {/* Table */}
-            <div className="overflow-auto rounded-lg border bg-white shadow-sm">
-                <table className="min-w-full text-sm">
-                    <thead className="bg-gray-50 text-gray-700">
-                    <tr className="text-left">
-                        <th className="px-3 py-2">From</th>
-                        <th className="px-3 py-2">Subject</th>
-                        <th className="px-3 py-2 whitespace-nowrap">Spam</th>
-                        <th className="px-3 py-2">DKIM</th>
-                        <th className="px-3 py-2">DMARC</th>
-                        <th className="px-3 py-2">ARC</th>
-                        <th className="px-3 py-2">Domain</th>
-                        <th className="px-3 py-2 whitespace-nowrap">Received</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    {items.length === 0 ? (
-                        <tr>
-                            <td className="px-3 py-6 text-center text-gray-500" colSpan={8}>
-                                No inbound messages found.
-                            </td>
-                        </tr>
-                    ) : items.map((m) => (
-                        <tr key={m.id} className="border-t">
-                            <td className="px-3 py-2">
-                                <span className="font-mono text-xs break-all">{m.from_email ?? '—'}</span>
-                            </td>
-                            <td className="px-3 py-2">
-                                <span className="text-gray-800">{m.subject ?? '—'}</span>
-                            </td>
-                            <td className="px-3 py-2">{m.spam_score ?? '—'}</td>
-                            <td className="px-3 py-2">{m.dkim_result ?? '—'}</td>
-                            <td className="px-3 py-2">{m.dmarc_result ?? '—'}</td>
-                            <td className="px-3 py-2">{m.arc_result ?? '—'}</td>
-                            <td className="px-3 py-2">{m.domain?.domain ?? (m.domain ? `#${m.domain.id}` : '—')}</td>
-                            <td className="px-3 py-2">{toLocale(m.received_at)}</td>
-                        </tr>
-                    ))}
-                    </tbody>
-                </table>
             </div>
-
-            {/* Pagination */}
-            <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-600">
-                    Page <span className="font-medium">{meta.page}</span> of{' '}
-                    <span className="font-medium">{meta.totalPages}</span> · {meta.total} total
-                </div>
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => updateQuery({ page: Math.max(1, meta.page - 1) })}
-                        disabled={meta.page <= 1}
-                        className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 hover:bg-gray-50 text-sm"
-                    >
-                        Previous
-                    </button>
-                    <button
-                        onClick={() => updateQuery({ page: Math.min(meta.totalPages, meta.page + 1) })}
-                        disabled={meta.page >= meta.totalPages}
-                        className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 hover:bg-gray-50 text-sm"
-                    >
-                        Next
-                    </button>
-                </div>
-            </div>
-
-            {domainsErr && (
-                <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
-                    {domainsErr}
-                </p>
-            )}
         </div>
     );
 }

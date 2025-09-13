@@ -6,7 +6,25 @@ import Link from 'next/link';
 import {
     ArrowLeftIcon,
     InformationCircleIcon,
+    FunnelIcon,
+    PaperAirplaneIcon,
+    ArchiveBoxIcon,
+    StopIcon,
+    ShieldCheckIcon,
+    ExclamationTriangleIcon,
+    CheckCircleIcon,
+    SparklesIcon,
+    GlobeAltIcon,
+    HashtagIcon,
+    UserIcon,
+    AtSymbolIcon,
+    DocumentTextIcon,
+    AdjustmentsHorizontalIcon,
+    PencilSquareIcon,
 } from '@heroicons/react/24/outline';
+import {
+    CheckCircleIcon as CheckCircleSolid,
+} from '@heroicons/react/24/solid';
 
 /* ----------------------------- Types ----------------------------- */
 
@@ -126,8 +144,8 @@ export default function InboundRouteEditLikeCreatePage() {
     const [exprType, setExprType] = useState<ExpressionType>('match_header');
     const [headerName, setHeaderName] = useState('');
     const [headerValue, setHeaderValue] = useState('');
-    const [recipient, setRecipient] = useState(''); // for rcpt
-    const [sender, setSender] = useState('');       // for sender
+    const [recipient, setRecipient] = useState('');
+    const [sender, setSender] = useState('');
 
     // Actions (toggles)
     const [forwardOn, setForwardOn] = useState(false);
@@ -135,15 +153,15 @@ export default function InboundRouteEditLikeCreatePage() {
     const [stopOn, setStopOn]       = useState(false);
 
     // Action payloads
-    const [forwardDestinations, setForwardDestinations] = useState(''); // CSV
-    const [storeNotifyUrls, setStoreNotifyUrls]         = useState(''); // CSV
+    const [forwardDestinations, setForwardDestinations] = useState('');
+    const [storeNotifyUrls, setStoreNotifyUrls]         = useState('');
 
     // Priority / Description
     const [priority, setPriority] = useState<string>('0');
     const [description, setDescription] = useState('');
 
     // Constraints
-    const [spamThreshold, setSpamThreshold] = useState<string>(''); // optional number
+    const [spamThreshold, setSpamThreshold] = useState<string>('');
     const [dkimRequired, setDkimRequired]   = useState(false);
     const [tlsRequired, setTlsRequired]     = useState(false);
 
@@ -273,7 +291,7 @@ export default function InboundRouteEditLikeCreatePage() {
         // Build pattern from expression UI
         const pattern = buildPattern(exprType, { headerName, headerValue, recipient, sender });
 
-        // Primary action (we follow same rule as create)
+        // Primary action
         const selected: Array<'forward' | 'store' | 'stop'> = [];
         if (forwardOn) selected.push('forward');
         if (storeOn)   selected.push('store');
@@ -300,7 +318,6 @@ export default function InboundRouteEditLikeCreatePage() {
                 },
             };
         } else {
-            // stop: no intrinsic destination, store meta information in a neutral object
             destination = {
                 type: 'store',
                 notify: [],
@@ -311,7 +328,6 @@ export default function InboundRouteEditLikeCreatePage() {
             };
         }
 
-        // If user toggled multiple actions, append note in meta
         if (destination && selected.length > 1) {
             const also = selected.slice(1).join(', ');
             const prev = destination.meta?.description || '';
@@ -344,7 +360,6 @@ export default function InboundRouteEditLikeCreatePage() {
                 throw new Error(msg);
             }
             setOk('Route updated successfully.');
-            // slight pause then back to list
             setTimeout(() => router.push(backHref), 450);
         } catch (e) {
             setErr(e instanceof Error ? e.message : 'Save failed');
@@ -357,21 +372,31 @@ export default function InboundRouteEditLikeCreatePage() {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <p className="text-gray-500">Loading…</p>
+            <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+                <div className="max-w-4xl mx-auto p-6">
+                    <div className="animate-pulse space-y-6">
+                        <div className="h-12 w-64 rounded-lg bg-gray-200" />
+                        <div className="rounded-xl bg-gray-200 h-96" />
+                    </div>
+                </div>
             </div>
         );
     }
+
     if (loadErr) {
         return (
-            <div className="min-h-screen flex items-center justify-center">
-                <div className="max-w-md text-center space-y-4">
-                    <p className="text-red-600">{loadErr}</p>
+            <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
+                <div className="rounded-xl bg-white p-8 shadow-lg max-w-md w-full">
+                    <div className="flex items-center gap-3 text-red-600 mb-2">
+                        <ExclamationTriangleIcon className="h-6 w-6" />
+                        <h2 className="text-lg font-semibold">Error Loading Route</h2>
+                    </div>
+                    <p className="text-gray-600">{loadErr}</p>
                     <button
                         onClick={() => router.push(`/dashboard/company/${hash}`)}
-                        className="inline-flex items-center space-x-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+                        className="mt-4 w-full rounded-lg bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 transition-colors"
                     >
-                        <ArrowLeftIcon className="h-4 w-4"/><span>Back</span>
+                        Back to Dashboard
                     </button>
                 </div>
             </div>
@@ -379,272 +404,410 @@ export default function InboundRouteEditLikeCreatePage() {
     }
 
     return (
-        <div className="max-w-3xl mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-3">
-                <button
-                    onClick={() => router.push(backHref)}
-                    className="inline-flex items-center text-gray-600 hover:text-gray-800"
-                >
-                    <ArrowLeftIcon className="h-5 w-5 mr-1" /> Back
-                </button>
-                <h1 className="text-2xl font-semibold">
-                    Edit Route {company?.name ? <span className="text-gray-500">· {company.name}</span> : null}
-                </h1>
-            </div>
-
-            {ok && (
-                <div className="flex items-start gap-2 rounded-md border border-green-200 bg-green-50 p-3 text-green-800">
-                    <InformationCircleIcon className="h-5 w-5 mt-0.5" />
-                    <div className="flex-1">{ok}</div>
-                </div>
-            )}
-            {err && (
-                <div className="rounded bg-red-50 text-red-700 px-3 py-2 text-sm">
-                    {err}
-                </div>
-            )}
-
-            <div className="bg-white border rounded-lg p-4 space-y-6">
-                {/* Expression section */}
-                <div>
-                    <p className="text-sm font-medium mb-1">Expression</p>
-                    <p className="text-sm text-gray-600">
-                        Route filters are expressions that determine when an action is triggered.
-                        If a route expression evaluates to true, the corresponding action(s) execute.
-                    </p>
-
-                    <div className="mt-4">
-                        <label className="block text-sm font-medium mb-1">Expression type</label>
-                        <select
-                            value={exprType}
-                            onChange={(e) => setExprType(e.target.value as ExpressionType)}
-                            className="w-full rounded border px-3 py-2"
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+            <div className="max-w-4xl mx-auto p-6 space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => router.push(backHref)}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 transition-all hover:shadow"
                         >
-                            <option value="match_header">Match Header</option>
-                            <option value="match_recipient">Match Recipient</option>
-                            <option value="match_sender">Match Sender</option>
-                            <option value="catch_all">Catch all</option>
-                        </select>
+                            <ArrowLeftIcon className="h-4 w-4" />
+                            Back to Routes
+                        </button>
+                        <div className="h-8 w-px bg-gray-200" />
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">Edit Inbound Route</h1>
+                            {company?.name && (
+                                <p className="text-sm text-gray-500">
+                                    {company.name} • Route #{id}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-lg bg-blue-50 px-3 py-1.5 text-sm">
+                        <PencilSquareIcon className="h-4 w-4 text-blue-600" />
+                        <span className="text-blue-700 font-medium">Edit Mode</span>
+                    </div>
+                </div>
+
+                {/* Alerts */}
+                {ok && (
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+                        <div className="flex items-center gap-3">
+                            <CheckCircleSolid className="h-5 w-5 text-emerald-600" />
+                            <p className="text-sm font-medium text-emerald-800">{ok}</p>
+                        </div>
+                    </div>
+                )}
+                {err && (
+                    <div className="rounded-xl bg-red-50 border border-red-200 p-4">
+                        <div className="flex items-center gap-3">
+                            <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />
+                            <p className="text-sm font-medium text-red-800">{err}</p>
+                        </div>
+                    </div>
+                )}
+
+                {/* Expression Section */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-4">
+                        <div className="flex items-center gap-2 text-white">
+                            <FunnelIcon className="h-5 w-5" />
+                            <h2 className="text-sm font-semibold uppercase tracking-wider">
+                                Expression & Filters
+                            </h2>
+                        </div>
                     </div>
 
-                    {exprType === 'match_header' && (
-                        <div className="mt-4 grid md:grid-cols-2 gap-4">
+                    <div className="p-6 space-y-6">
+                        <div>
+                            <p className="text-sm text-gray-600">
+                                Route filters are expressions that determine when an action is triggered.
+                                If a route expression evaluates to true, the corresponding action(s) execute.
+                            </p>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label htmlFor="route-header-name" className="block text-sm font-medium mb-1">
-                                    Header name <span className="text-red-600">*</span>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Expression Type
+                                </label>
+                                <select
+                                    value={exprType}
+                                    onChange={(e) => setExprType(e.target.value as ExpressionType)}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    <option value="match_header">Match Header</option>
+                                    <option value="match_recipient">Match Recipient</option>
+                                    <option value="match_sender">Match Sender</option>
+                                    <option value="catch_all">Catch All</option>
+                                </select>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <GlobeAltIcon className="inline h-4 w-4 mr-1" />
+                                    Domain Scope
+                                </label>
+                                <select
+                                    value={domainId}
+                                    onChange={(e) => setDomainId(e.target.value === '' ? '' : Number(e.target.value))}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    <option value="">All domains</option>
+                                    {domains.map(d => (
+                                        <option key={d.id} value={d.id}>
+                                            {d.domain ?? `#${d.id}`}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {exprType === 'match_header' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <DocumentTextIcon className="inline h-4 w-4 mr-1" />
+                                        Header Name <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        placeholder="X-Header-Name"
+                                        value={headerName}
+                                        onChange={(e) => setHeaderName(e.target.value)}
+                                        className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        Uses the specified header name to match against
+                                    </p>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Header Value <span className="text-red-500">*</span>
+                                    </label>
+                                    <input
+                                        placeholder="Header value"
+                                        value={headerValue}
+                                        onChange={(e) => setHeaderValue(e.target.value)}
+                                        className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    />
+                                    <p className="mt-1 text-xs text-gray-500">
+                                        Matches if the specified value equals the header value
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+
+                        {exprType === 'match_recipient' && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <AtSymbolIcon className="inline h-4 w-4 mr-1" />
+                                    Recipient Pattern <span className="text-red-500">*</span>
                                 </label>
                                 <input
-                                    id="route-header-name"
-                                    placeholder="X-Header-Name"
-                                    value={headerName}
-                                    onChange={(e) => setHeaderName(e.target.value)}
-                                    className="w-full rounded border px-3 py-2"
+                                    placeholder="help@*, *@inbound.example.com"
+                                    value={recipient}
+                                    onChange={(e) => setRecipient(e.target.value)}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Uses the specified header name to match against
+                                <p className="mt-1 text-xs text-gray-500">
+                                    Use wildcards (*) to match patterns
+                                </p>
+                            </div>
+                        )}
+
+                        {exprType === 'match_sender' && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <UserIcon className="inline h-4 w-4 mr-1" />
+                                    Sender Pattern <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    placeholder="sales@*, *@partner.com"
+                                    value={sender}
+                                    onChange={(e) => setSender(e.target.value)}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                />
+                                <p className="mt-1 text-xs text-gray-500">
+                                    Use wildcards (*) to match patterns
+                                </p>
+                            </div>
+                        )}
+
+                        {exprType === 'catch_all' && (
+                            <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                                <div className="flex items-center gap-2">
+                                    <InformationCircleIcon className="h-5 w-5 text-blue-600" />
+                                    <p className="text-sm text-blue-800">
+                                        This route will match all incoming messages not caught by other routes
+                                    </p>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Actions Section */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4">
+                        <div className="flex items-center gap-2 text-white">
+                            <SparklesIcon className="h-5 w-5" />
+                            <h2 className="text-sm font-semibold uppercase tracking-wider">
+                                Actions
+                            </h2>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                        {/* Forward Action */}
+                        <div className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors">
+                            <div className="flex items-start gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={forwardOn}
+                                    onChange={(e) => setForwardOn(e.target.checked)}
+                                    id="act-forward"
+                                    className="mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <div className="flex-1">
+                                    <label htmlFor="act-forward" className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                                        <PaperAirplaneIcon className="h-4 w-4 text-blue-600" />
+                                        Forward
+                                    </label>
+                                    <p className="mt-1 text-sm text-gray-600">
+                                        Forwards the message to a specified destination, which can be another email address or a URL.
+                                        You can combine multiple destinations by separating them with commas.
+                                    </p>
+                                    {forwardOn && (
+                                        <textarea
+                                            rows={2}
+                                            placeholder="address@example.com, https://myapp.com/messages"
+                                            value={forwardDestinations}
+                                            onChange={(e) => setForwardDestinations(e.target.value)}
+                                            className="mt-3 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Store Action */}
+                        <div className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors">
+                            <div className="flex items-start gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={storeOn}
+                                    onChange={(e) => setStoreOn(e.target.checked)}
+                                    id="act-store"
+                                    className="mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <div className="flex-1">
+                                    <label htmlFor="act-store" className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                                        <ArchiveBoxIcon className="h-4 w-4 text-emerald-600" />
+                                        Store and Notify
+                                    </label>
+                                    <p className="mt-1 text-sm text-gray-600">
+                                        Stores the message temporarily so you can retrieve it later. You can combine multiple
+                                        retrieval callback URLs separated by commas. If you don&#39;t specify a URL, you can fetch
+                                        the message later via API.
+                                    </p>
+                                    {storeOn && (
+                                        <textarea
+                                            rows={2}
+                                            placeholder="https://myapp.com/callback"
+                                            value={storeNotifyUrls}
+                                            onChange={(e) => setStoreNotifyUrls(e.target.value)}
+                                            className="mt-3 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        />
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Stop Action */}
+                        <div className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors">
+                            <div className="flex items-start gap-3">
+                                <input
+                                    type="checkbox"
+                                    checked={stopOn}
+                                    onChange={(e) => setStopOn(e.target.checked)}
+                                    id="act-stop"
+                                    className="mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                />
+                                <div className="flex-1">
+                                    <label htmlFor="act-stop" className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                                        <StopIcon className="h-4 w-4 text-red-600" />
+                                        Stop
+                                    </label>
+                                    <p className="mt-1 text-sm text-gray-600">
+                                        Sets the priority waterfall so the subsequent routes will not be evaluated.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Additional Settings */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-amber-500 to-amber-600 px-6 py-4">
+                        <div className="flex items-center gap-2 text-white">
+                            <AdjustmentsHorizontalIcon className="h-5 w-5" />
+                            <h2 className="text-sm font-semibold uppercase tracking-wider">
+                                Additional Settings
+                            </h2>
+                        </div>
+                    </div>
+
+                    <div className="p-6 space-y-6">
+                        {/* Priority & Description */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <HashtagIcon className="inline h-4 w-4 mr-1" />
+                                    Priority
+                                </label>
+                                <input
+                                    value={priority}
+                                    onChange={(e) => setPriority(e.target.value)}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    placeholder="0"
+                                    type="number"
+                                />
+                                <p className="mt-1 text-xs text-gray-500">
+                                    Lower numbers = higher priority
                                 </p>
                             </div>
                             <div>
-                                <label htmlFor="route-header-value" className="block text-sm font-medium mb-1">
-                                    Header value <span className="text-red-600">*</span>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    Description
                                 </label>
                                 <input
-                                    id="route-header-value"
-                                    placeholder="Header value"
-                                    value={headerValue}
-                                    onChange={(e) => setHeaderValue(e.target.value)}
-                                    className="w-full rounded border px-3 py-2"
+                                    value={description}
+                                    onChange={(e) => setDescription(e.target.value)}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    placeholder="Optional note for this route"
                                 />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Matches if the specified value equals the header value
-                                </p>
                             </div>
                         </div>
-                    )}
 
-                    {exprType === 'match_recipient' && (
-                        <div className="mt-4">
-                            <label className="block text-sm font-medium mb-1">Recipient pattern <span className="text-red-600">*</span></label>
-                            <input
-                                placeholder="help@*, *@inbound.example.com"
-                                value={recipient}
-                                onChange={(e) => setRecipient(e.target.value)}
-                                className="w-full rounded border px-3 py-2"
-                            />
+                        {/* Constraints */}
+                        <div>
+                            <h3 className="text-sm font-medium text-gray-700 mb-3">Security Constraints</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        <ExclamationTriangleIcon className="inline h-4 w-4 mr-1" />
+                                        Spam Threshold
+                                    </label>
+                                    <input
+                                        value={spamThreshold}
+                                        onChange={(e) => setSpamThreshold(e.target.value)}
+                                        className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                        placeholder="e.g. 5.0"
+                                        type="number"
+                                        step="0.1"
+                                    />
+                                </div>
+                                <div className="flex items-end">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={dkimRequired}
+                                            onChange={(e) => setDkimRequired(e.target.checked)}
+                                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <span className="text-sm font-medium text-gray-700">
+                                            <ShieldCheckIcon className="inline h-4 w-4 mr-1" />
+                                            DKIM Required
+                                        </span>
+                                    </label>
+                                </div>
+                                <div className="flex items-end">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            checked={tlsRequired}
+                                            onChange={(e) => setTlsRequired(e.target.checked)}
+                                            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                        />
+                                        <span className="text-sm font-medium text-gray-700">
+                                            <ShieldCheckIcon className="inline h-4 w-4 mr-1" />
+                                            TLS Required
+                                        </span>
+                                    </label>
+                                </div>
+                            </div>
                         </div>
-                    )}
-
-                    {exprType === 'match_sender' && (
-                        <div className="mt-4">
-                            <label className="block text-sm font-medium mb-1">Sender pattern <span className="text-red-600">*</span></label>
-                            <input
-                                placeholder="sales@*, *@partner.com"
-                                value={sender}
-                                onChange={(e) => setSender(e.target.value)}
-                                className="w-full rounded border px-3 py-2"
-                            />
-                        </div>
-                    )}
-
-                    {/* Domain scope (optional) */}
-                    <div className="mt-4">
-                        <label className="block text-sm font-medium mb-1">Domain (optional)</label>
-                        <select
-                            value={domainId}
-                            onChange={(e) => setDomainId(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full rounded border px-3 py-2"
-                        >
-                            <option value="">(All domains)</option>
-                            {domains.map(d => <option key={d.id} value={d.id}>{d.domain ?? `#${d.id}`}</option>)}
-                        </select>
                     </div>
                 </div>
 
                 {/* Actions */}
-                <div className="space-y-6">
-                    {/* Forward */}
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <input
-                                type="checkbox"
-                                checked={forwardOn}
-                                onChange={(e) => setForwardOn(e.target.checked)}
-                                id="act-forward"
-                            />
-                            <label htmlFor="act-forward" className="text-sm font-medium">Forward</label>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">
-                            Forwards the message to a specified destination, which can be another email address or a URL.
-                            You can combine multiple destinations by separating them with commas.
-                        </p>
-                        {forwardOn && (
-                            <div className="mt-2">
-                <textarea
-                    rows={2}
-                    placeholder="address@example.com, https://myapp.com/messages"
-                    value={forwardDestinations}
-                    onChange={(e) => setForwardDestinations(e.target.value)}
-                    className="w-full rounded border px-3 py-2"
-                />
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Store & notify */}
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <input
-                                type="checkbox"
-                                checked={storeOn}
-                                onChange={(e) => setStoreOn(e.target.checked)}
-                                id="act-store"
-                            />
-                            <label htmlFor="act-store" className="text-sm font-medium">Store and notify</label>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">
-                            Stores the message temporarily so you can retrieve it later. You can combine multiple
-                            retrieval callback URLs separated by commas. If you don’t specify a URL, you can fetch
-                            the message later via API.
-                        </p>
-                        {storeOn && (
-                            <div className="mt-2">
-                <textarea
-                    rows={2}
-                    placeholder="https://myapp.com/callback"
-                    value={storeNotifyUrls}
-                    onChange={(e) => setStoreNotifyUrls(e.target.value)}
-                    className="w-full rounded border px-3 py-2"
-                />
-                            </div>
-                        )}
-                    </div>
-
-                    {/* Stop */}
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <input
-                                type="checkbox"
-                                checked={stopOn}
-                                onChange={(e) => setStopOn(e.target.checked)}
-                                id="act-stop"
-                            />
-                            <label htmlFor="act-stop" className="text-sm font-medium">Stop</label>
-                        </div>
-                        <p className="text-sm text-gray-600 mt-1">
-                            Sets the priority waterfall so the subsequent routes will not be evaluated.
-                        </p>
-                    </div>
-                </div>
-
-                {/* Priority & Description */}
-                <div className="space-y-3">
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Priority</label>
-                        <input
-                            value={priority}
-                            onChange={(e) => setPriority(e.target.value)}
-                            className="w-full rounded border px-3 py-2"
-                            placeholder="0"
-                            inputMode="numeric"
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                            Routes are evaluated from lowest to highest priority. Same priority → newer routes first.
-                        </p>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Description</label>
-                        <input
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            className="w-full rounded border px-3 py-2"
-                            placeholder="Optional note for this route"
-                        />
-                    </div>
-                </div>
-
-                {/* Constraints */}
-                <div className="grid md:grid-cols-3 gap-3">
-                    <div>
-                        <label className="block text-sm font-medium mb-1">Spam threshold</label>
-                        <input
-                            value={spamThreshold}
-                            onChange={(e) => setSpamThreshold(e.target.value)}
-                            className="w-full rounded border px-3 py-2"
-                            placeholder="e.g. 5.0"
-                            inputMode="decimal"
-                        />
-                    </div>
-                    <div className="flex items-center gap-2 pt-6">
-                        <input
-                            type="checkbox"
-                            checked={dkimRequired}
-                            onChange={(e) => setDkimRequired(e.target.checked)}
-                            id="dkim_req"
-                        />
-                        <label htmlFor="dkim_req" className="text-sm font-medium">DKIM required</label>
-                    </div>
-                    <div className="flex items-center gap-2 pt-6">
-                        <input
-                            type="checkbox"
-                            checked={tlsRequired}
-                            onChange={(e) => setTlsRequired(e.target.checked)}
-                            id="tls_req"
-                        />
-                        <label htmlFor="tls_req" className="text-sm font-medium">TLS required</label>
-                    </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2">
-                    <Link href={backHref} className="px-4 py-2 rounded border hover:bg-gray-50">
+                <div className="flex items-center justify-end gap-3">
+                    <Link
+                        href={backHref}
+                        className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 transition-all"
+                    >
                         Cancel
                     </Link>
                     <button
                         onClick={onSubmit}
                         disabled={submitting}
-                        className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                        className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:from-indigo-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
                     >
-                        {submitting ? 'Saving…' : 'Save changes'}
+                        {submitting ? (
+                            <>
+                                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                                Saving...
+                            </>
+                        ) : (
+                            <>
+                                <CheckCircleIcon className="h-4 w-4" />
+                                Save Changes
+                            </>
+                        )}
                     </button>
                 </div>
             </div>
