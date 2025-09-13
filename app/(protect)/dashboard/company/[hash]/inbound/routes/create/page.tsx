@@ -301,7 +301,7 @@ export default function InboundRouteCreateLikeMailgunPage() {
 
         setSubmitting(true);
         try {
-            const res = await fetch(joinUrl(backend, `/companies/${hash}/inbound/routes`), {
+            const res = await fetch(joinUrl(backend, `/companies/${hash}/inbound-routes`), {
                 method: 'POST',
                 headers: authHeaders(),
                 body: JSON.stringify(payload),
