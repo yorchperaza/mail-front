@@ -35,15 +35,16 @@ type EventItem = {
     type: EventType;
     at: string;
     recipient: { email?: string | null };
-    domain?: { id?: number; name?: string } | null;      // ← add
-    domain_id?: number | null;                            // ← optional
+    domain?: { id?: number; name?: string } | null;
+    domain_id?: number | null;
+    domainName?: string | null;               // ← add this (API sometimes sends it)
     message?: {
         id?: number | null;
         messageId?: string | null;
         subject?: string | null;
-        domainName?: string | null;                         // string, if your API sometimes sends this
-        domain?: { id?: number; name?: string } | null;     // ← add
-        domain_id?: number | null;                          // ← optional
+        domainName?: string | null;
+        domain?: { id?: number; name?: string } | null;
+        domain_id?: number | null;
     };
 };
 
@@ -225,18 +226,31 @@ export default function CompanyEventsPage() {
     }, [domains]);
 
     const getEventDomain = (ev: EventItem): string | null => {
-        return (
+        // direct names first
+        const byName =
             ev.message?.domain?.name ??
             ev.domain?.name ??
             ev.message?.domainName ??
-            ((ev as any).domainName as string | undefined) ??
-            (ev.message && (ev.message as any).domain_id && domainMap[(ev.message as any).domain_id]) ??
-            (((ev as any).domain_id as number | undefined) && domainMap[(ev as any).domain_id as number]) ??
-            (ev.recipient?.email && ev.recipient.email.includes('@') ? ev.recipient.email.split('@')[1] : null) ??
-            null
-        );
-    };
+            ev.domainName;
 
+        if (byName) return byName;
+
+        // by id → lookup
+        const msgDomainId = typeof ev.message?.domain_id === 'number' ? ev.message.domain_id : undefined;
+        if (msgDomainId !== undefined && domainMap[msgDomainId]) return domainMap[msgDomainId];
+
+        const eventDomainId = typeof ev.domain_id === 'number' ? ev.domain_id : undefined;
+        if (eventDomainId !== undefined && domainMap[eventDomainId]) return domainMap[eventDomainId];
+
+        // last resort: parse from recipient email
+        const email = ev.recipient?.email;
+        if (email && email.includes('@')) {
+            const [, dom] = email.split('@');
+            if (dom) return dom;
+        }
+
+        return null;
+    };
 
     // Fetch events
     useEffect(() => {
