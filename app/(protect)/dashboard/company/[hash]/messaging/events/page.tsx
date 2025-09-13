@@ -32,14 +32,18 @@ type EventType = KnownEventType | string;
 
 type EventItem = {
     id: number;
-    type: EventType;            // stricter but tolerant
-    at: string;                 // ISO
+    type: EventType;
+    at: string;
     recipient: { email?: string | null };
+    domain?: { id?: number; name?: string } | null;      // ← add
+    domain_id?: number | null;                            // ← optional
     message?: {
         id?: number | null;
         messageId?: string | null;
         subject?: string | null;
-        domainName?: string | null;
+        domainName?: string | null;                         // string, if your API sometimes sends this
+        domain?: { id?: number; name?: string } | null;     // ← add
+        domain_id?: number | null;                          // ← optional
     };
 };
 
@@ -213,6 +217,26 @@ export default function CompanyEventsPage() {
         from.setUTCDate(to.getUTCDate() - (days - 1));
         updateQuery({ since: fmtDateUTC(from), until: fmtDateUTC(to) }, true);
     }
+
+    const domainMap = useMemo(() => {
+        const map: Record<number, string> = {};
+        for (const d of domains) map[d.id] = d.domain;
+        return map;
+    }, [domains]);
+
+    const getEventDomain = (ev: EventItem): string | null => {
+        return (
+            ev.message?.domain?.name ??
+            ev.domain?.name ??
+            ev.message?.domainName ??
+            ((ev as any).domainName as string | undefined) ??
+            (ev.message && (ev.message as any).domain_id && domainMap[(ev.message as any).domain_id]) ??
+            (((ev as any).domain_id as number | undefined) && domainMap[(ev as any).domain_id as number]) ??
+            (ev.recipient?.email && ev.recipient.email.includes('@') ? ev.recipient.email.split('@')[1] : null) ??
+            null
+        );
+    };
+
 
     // Fetch events
     useEffect(() => {
@@ -492,6 +516,7 @@ export default function CompanyEventsPage() {
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
                                 {items.map((ev) => {
+                                    const dn = getEventDomain(ev);
                                     const c = cfgFor(ev.type);
                                     const M = ev.message;
                                     const canLink = !!M?.messageId;
@@ -517,7 +542,7 @@ export default function CompanyEventsPage() {
                                                 <div className="text-sm text-gray-900">{M?.subject || <span className="text-gray-400 italic">No Subject</span>}</div>
                                                 <div className="text-xs text-gray-500 font-mono mt-1">{short(M?.messageId, 24)}</div>
                                             </td>
-                                            <td className="px-4 py-3 text-sm text-blue-600">{M?.domainName || '—'}</td>
+                                            <td className="px-4 py-3 text-sm text-blue-600">{dn ?? '—'}</td>
                                             <td className="px-4 py-3 text-right">
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); go(); }}
