@@ -7,7 +7,7 @@ import {
     ArrowLeftIcon,
     InformationCircleIcon,
     FunnelIcon,
-    PaperAirplaneIcon,
+    // PaperAirplaneIcon, // [forward removed]
     ArchiveBoxIcon,
     StopIcon,
     ShieldCheckIcon,
@@ -22,9 +22,7 @@ import {
     AdjustmentsHorizontalIcon,
     PencilSquareIcon,
 } from '@heroicons/react/24/outline';
-import {
-    CheckCircleIcon as CheckCircleSolid,
-} from '@heroicons/react/24/solid';
+import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 
 /* ----------------------------- Types ----------------------------- */
 
@@ -37,15 +35,21 @@ type ExpressionType =
     | 'match_sender'
     | 'catch_all';
 
-type DestinationForward = { type: 'forward'; to: string[]; meta?: { priority?: number; description?: string } };
-type DestinationStore   = { type: 'store';   notify: string[]; meta?: { priority?: number; description?: string } };
-type Destination = DestinationForward | DestinationStore;
+// Forward destination removed from runtime; keep comment for future re-enable
+// type DestinationForward = { type: 'forward'; to: string[]; meta?: { priority?: number; description?: string } };
+type DestinationStore = { type: 'store'; notify: string[]; meta?: { priority?: number; description?: string } };
+type Destination = DestinationStore; // only store supported
 
+// Action 'forward' removed
+// type ActionKind = 'forward' | 'store' | 'stop' | '';
+type ActionKind = 'store' | 'stop' | '';
+
+// Server route type with legacy compatibility (action may still be 'forward' historically)
 type InboundRoute = {
     id: number;
     pattern: string | null;
-    action: 'forward' | 'store' | 'stop' | null;
-    destination: Destination | null;
+    action: 'store' | 'stop' | 'forward' | null; // we won't expose 'forward' in UI
+    destination: (Destination & { type: 'store' }) | null; // forward not used
     spam_threshold: number | null;
     dkim_required: number | null; // 0|1|null
     tls_required: number | null;  // 0|1|null
@@ -55,11 +59,9 @@ type InboundRoute = {
 
 /* ----------------------------- Helpers ----------------------------- */
 
-const joinUrl = (base: string, path: string) =>
-    `${(base || '').replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
+const joinUrl = (base: string, path: string) => `${(base || '').replace(/\/+$/, '')}/${path.replace(/^\/+/, '')}`;
 
-const splitCSV = (s: string): string[] =>
-    s.split(',').map(x => x.trim()).filter(Boolean);
+const splitCSV = (s: string): string[] => s.split(',').map(x => x.trim()).filter(Boolean);
 
 const toCSV = (a?: string[]) => (Array.isArray(a) ? a.join(', ') : '');
 
@@ -73,7 +75,7 @@ function buildPattern(
     switch (type) {
         case 'match_header': {
             const name = (opts.headerName || '').trim();
-            const val  = (opts.headerValue || '').trim();
+            const val = (opts.headerValue || '').trim();
             return `header:${name}=${val}`;
         }
         case 'match_recipient': {
@@ -106,7 +108,7 @@ function parsePattern(pattern?: string | null): {
         const rest = p.slice('header:'.length);
         const idx = rest.indexOf('=');
         const name = idx >= 0 ? rest.slice(0, idx) : rest;
-        const val  = idx >= 0 ? rest.slice(idx + 1) : '';
+        const val = idx >= 0 ? rest.slice(idx + 1) : '';
         return { type: 'match_header', headerName: name, headerValue: val, recipient: '', sender: '' };
     }
     if (p.startsWith('rcpt:')) {
@@ -147,12 +149,11 @@ export default function InboundRouteEditLikeCreatePage() {
     const [recipient, setRecipient] = useState('');
     const [sender, setSender] = useState('');
 
-    type ActionKind = 'forward' | 'store' | 'stop' | '';
     const [action, setAction] = useState<ActionKind>('');
 
-    // Action payloads
-    const [forwardDestinations, setForwardDestinations] = useState('');
-    const [storeNotifyUrls, setStoreNotifyUrls]         = useState('');
+    // Action payloads (forward removed)
+    // const [forwardDestinations, setForwardDestinations] = useState('');
+    const [storeNotifyUrls, setStoreNotifyUrls] = useState('');
 
     // Priority / Description
     const [priority, setPriority] = useState<string>('0');
@@ -160,13 +161,13 @@ export default function InboundRouteEditLikeCreatePage() {
 
     // Constraints
     const [spamThreshold, setSpamThreshold] = useState<string>('');
-    const [dkimRequired, setDkimRequired]   = useState(false);
-    const [tlsRequired, setTlsRequired]     = useState(false);
+    const [dkimRequired, setDkimRequired] = useState(false);
+    const [tlsRequired, setTlsRequired] = useState(false);
 
     // UX
     const [submitting, setSubmitting] = useState(false);
     const [err, setErr] = useState<string | null>(null);
-    const [ok, setOk]   = useState<string | null>(null);
+    const [ok, setOk] = useState<string | null>(null);
 
     const backHref = `/dashboard/company/${hash}/inbound/routes`;
     const routeUrl = useMemo(() => joinUrl(backend, `/companies/${hash}/inbound-routes/${id}`), [backend, hash, id]);
@@ -200,7 +201,6 @@ export default function InboundRouteEditLikeCreatePage() {
                 const rRes = await fetch(routeUrl, { headers: authHeaders() });
                 if (!rRes.ok) throw new Error(`Failed to load route (${rRes.status})`);
                 const r = (await rRes.json()) as InboundRoute;
-                console.log(r);
                 if (abort) return;
 
                 // Fill form from route
@@ -214,25 +214,16 @@ export default function InboundRouteEditLikeCreatePage() {
                 setDomainId(r.domain?.id ?? '');
 
                 // reset
-                setForwardDestinations('');
                 setStoreNotifyUrls('');
                 setPriority('0');
                 setDescription('');
 
-                const inferred: ActionKind =
-                    (r.action as ActionKind) ||
-                    (r.destination?.type === 'forward' ? 'forward'
-                        : r.destination?.type === 'store' ? 'store'
-                            : '') as ActionKind;
-
+                // infer action: if server says 'forward', coerce to empty so user must pick a supported action
+                const inferred: ActionKind = (r.action === 'store' || r.action === 'stop') ? r.action : '';
                 setAction(inferred);
 
                 // payloads
-                if (r.destination?.type === 'forward') {
-                    // TS knows r.destination is DestinationForward here
-                    setForwardDestinations(toCSV(r.destination.to));
-                } else if (r.destination?.type === 'store') {
-                    // TS knows r.destination is DestinationStore here
+                if (r.destination?.type === 'store') {
                     setStoreNotifyUrls(toCSV(r.destination.notify));
                 }
 
@@ -271,10 +262,8 @@ export default function InboundRouteEditLikeCreatePage() {
             return 'Sender pattern is required.';
         }
 
-        if (!action) return 'Select one action (Forward, Store & notify, or Stop).';
-        if (action === 'forward' && !forwardDestinations.trim()) {
-            return 'Forward destinations are required when Forward is selected.';
-        }
+        if (!action) return 'Select one action (Store & notify, or Stop).';
+
         if (spamThreshold.trim() !== '' && !isNumber(spamThreshold)) {
             return 'Spam threshold must be a number.';
         }
@@ -284,7 +273,6 @@ export default function InboundRouteEditLikeCreatePage() {
         return null;
     }
 
-
     /* ------------------------------ submit ----------------------------- */
 
     async function onSubmit() {
@@ -292,25 +280,19 @@ export default function InboundRouteEditLikeCreatePage() {
         setOk(null);
 
         const v = validate();
-        if (v) { setErr(v); return; }
+        if (v) {
+            setErr(v);
+            return;
+        }
 
         // Build pattern from expression UI
         const pattern = buildPattern(exprType, { headerName, headerValue, recipient, sender });
 
-        // Primary action
-        const primary = action as 'forward' | 'store' | 'stop';
+        // Primary action (forward not allowed)
+        const primary = action as 'store' | 'stop';
 
         let destination: Destination | null = null;
-        if (primary === 'forward') {
-            destination = {
-                type: 'forward',
-                to: splitCSV(forwardDestinations),
-                meta: {
-                    priority: priority.trim() === '' ? undefined : Number(priority),
-                    description: description.trim() || undefined,
-                },
-            };
-        } else if (primary === 'store') {
+        if (primary === 'store') {
             destination = {
                 type: 'store',
                 notify: splitCSV(storeNotifyUrls),
@@ -343,7 +325,15 @@ export default function InboundRouteEditLikeCreatePage() {
             });
             if (!res.ok) {
                 let msg = `Save failed (${res.status})`;
-                try { const js = await res.json(); msg = (js as { error?: string; message?: string })?.error || js?.message || msg; } catch {}
+                try {
+                    const js: unknown = await res.json();
+                    if (typeof js === 'object' && js !== null) {
+                        const o = js as { error?: unknown; message?: unknown };
+                        const e = typeof o.error === 'string' ? o.error : undefined;
+                        const m = typeof o.message === 'string' ? o.message : undefined;
+                        msg = e ?? m ?? msg;
+                    }
+                } catch {}
                 throw new Error(msg);
             }
             setOk('Route updated successfully.');
@@ -407,9 +397,7 @@ export default function InboundRouteEditLikeCreatePage() {
                         <div>
                             <h1 className="text-2xl font-bold text-gray-900">Edit Inbound Route</h1>
                             {company?.name && (
-                                <p className="text-sm text-gray-500">
-                                    {company.name} • Route #{id}
-                                </p>
+                                <p className="text-sm text-gray-500">{company.name} • Route #{id}</p>
                             )}
                         </div>
                     </div>
@@ -442,9 +430,7 @@ export default function InboundRouteEditLikeCreatePage() {
                     <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-4">
                         <div className="flex items-center gap-2 text-white">
                             <FunnelIcon className="h-5 w-5" />
-                            <h2 className="text-sm font-semibold uppercase tracking-wider">
-                                Expression & Filters
-                            </h2>
+                            <h2 className="text-sm font-semibold uppercase tracking-wider">Expression & Filters</h2>
                         </div>
                     </div>
 
@@ -458,9 +444,7 @@ export default function InboundRouteEditLikeCreatePage() {
 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Expression Type
-                                </label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Expression Type</label>
                                 <select
                                     value={exprType}
                                     onChange={(e) => setExprType(e.target.value as ExpressionType)}
@@ -506,23 +490,17 @@ export default function InboundRouteEditLikeCreatePage() {
                                         onChange={(e) => setHeaderName(e.target.value)}
                                         className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                     />
-                                    <p className="mt-1 text-xs text-gray-500">
-                                        Uses the specified header name to match against
-                                    </p>
+                                    <p className="mt-1 text-xs text-gray-500">Uses the specified header name to match against</p>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Header Value <span className="text-red-500">*</span>
-                                    </label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Header Value <span className="text-red-500">*</span></label>
                                     <input
                                         placeholder="Header value"
                                         value={headerValue}
                                         onChange={(e) => setHeaderValue(e.target.value)}
                                         className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                     />
-                                    <p className="mt-1 text-xs text-gray-500">
-                                        Matches if the specified value equals the header value
-                                    </p>
+                                    <p className="mt-1 text-xs text-gray-500">Matches if the specified value equals the header value</p>
                                 </div>
                             </div>
                         )}
@@ -539,9 +517,7 @@ export default function InboundRouteEditLikeCreatePage() {
                                     onChange={(e) => setRecipient(e.target.value)}
                                     className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 />
-                                <p className="mt-1 text-xs text-gray-500">
-                                    Use wildcards (*) to match patterns
-                                </p>
+                                <p className="mt-1 text-xs text-gray-500">Use wildcards (*) to match patterns</p>
                             </div>
                         )}
 
@@ -557,9 +533,7 @@ export default function InboundRouteEditLikeCreatePage() {
                                     onChange={(e) => setSender(e.target.value)}
                                     className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                 />
-                                <p className="mt-1 text-xs text-gray-500">
-                                    Use wildcards (*) to match patterns
-                                </p>
+                                <p className="mt-1 text-xs text-gray-500">Use wildcards (*) to match patterns</p>
                             </div>
                         )}
 
@@ -567,9 +541,7 @@ export default function InboundRouteEditLikeCreatePage() {
                             <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
                                 <div className="flex items-center gap-2">
                                     <InformationCircleIcon className="h-5 w-5 text-blue-600" />
-                                    <p className="text-sm text-blue-800">
-                                        This route will match all incoming messages not caught by other routes
-                                    </p>
+                                    <p className="text-sm text-blue-800">This route will match all incoming messages not caught by other routes</p>
                                 </div>
                             </div>
                         )}
@@ -586,37 +558,21 @@ export default function InboundRouteEditLikeCreatePage() {
                     </div>
 
                     <div className="p-6 space-y-6">
-                        {/* Forward */}
-                        <div className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors">
-                            <div className="flex items-start gap-3">
-                                <input
-                                    type="radio"
-                                    name="route-action"
-                                    checked={action === 'forward'}
-                                    onChange={() => setAction('forward')}
-                                    id="act-forward"
-                                    className="mt-1 text-indigo-600 focus:ring-indigo-500"
-                                />
-                                <div className="flex-1">
-                                    <label htmlFor="act-forward" className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
-                                        <PaperAirplaneIcon className="h-4 w-4 text-blue-600" />
-                                        Forward
-                                    </label>
-                                    <p className="mt-1 text-sm text-gray-600">
-                                        Forwards the message to another email address or a URL. Multiple destinations are comma-separated.
-                                    </p>
-                                    {action === 'forward' && (
-                                        <textarea
-                                            rows={2}
-                                            placeholder="address@example.com, https://myapp.com/messages"
-                                            value={forwardDestinations}
-                                            onChange={(e) => setForwardDestinations(e.target.value)}
-                                            className="mt-3 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        />
-                                    )}
+                        {/* Forward (disabled placeholder) */}
+                        {false && (
+                            <div className="rounded-lg border border-gray-200 p-4">
+                                <div className="flex items-start gap-3">
+                                    <input type="radio" name="route-action" id="act-forward" className="mt-1 text-indigo-600" />
+                                    <div className="flex-1">
+                                        <label htmlFor="act-forward" className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                                            {/* <PaperAirplaneIcon className="h-4 w-4 text-blue-600" /> */}
+                                            Forward (disabled)
+                                        </label>
+                                        <p className="mt-1 text-sm text-gray-600">This option has been temporarily removed and will return in a future version.</p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Store */}
                         <div className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors">
@@ -634,9 +590,7 @@ export default function InboundRouteEditLikeCreatePage() {
                                         <ArchiveBoxIcon className="h-4 w-4 text-emerald-600" />
                                         Store and Notify
                                     </label>
-                                    <p className="mt-1 text-sm text-gray-600">
-                                        Temporarily stores the message. Optionally set callback URLs (comma-separated) to be notified.
-                                    </p>
+                                    <p className="mt-1 text-sm text-gray-600">Temporarily stores the message. Optionally set callback URLs (comma-separated) to be notified.</p>
                                     {action === 'store' && (
                                         <textarea
                                             rows={2}
@@ -666,9 +620,7 @@ export default function InboundRouteEditLikeCreatePage() {
                                         <StopIcon className="h-4 w-4 text-red-600" />
                                         Stop
                                     </label>
-                                    <p className="mt-1 text-sm text-gray-600">
-                                        Do not evaluate subsequent routes.
-                                    </p>
+                                    <p className="mt-1 text-sm text-gray-600">Do not evaluate subsequent routes.</p>
                                 </div>
                             </div>
                         </div>
@@ -680,9 +632,7 @@ export default function InboundRouteEditLikeCreatePage() {
                     <div className="bg-gradient-to-r from-amber-500 to-amber-600 px-6 py-4">
                         <div className="flex items-center gap-2 text-white">
                             <AdjustmentsHorizontalIcon className="h-5 w-5" />
-                            <h2 className="text-sm font-semibold uppercase tracking-wider">
-                                Additional Settings
-                            </h2>
+                            <h2 className="text-sm font-semibold uppercase tracking-wider">Additional Settings</h2>
                         </div>
                     </div>
 
@@ -701,14 +651,10 @@ export default function InboundRouteEditLikeCreatePage() {
                                     placeholder="0"
                                     type="number"
                                 />
-                                <p className="mt-1 text-xs text-gray-500">
-                                    Lower numbers = higher priority
-                                </p>
+                                <p className="mt-1 text-xs text-gray-500">Lower numbers = higher priority</p>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">
-                                    Description
-                                </label>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Description</label>
                                 <input
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
@@ -733,7 +679,7 @@ export default function InboundRouteEditLikeCreatePage() {
                                         className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         placeholder="e.g. 5.0"
                                         type="number"
-                                        step="0.1"
+                                        step={0.1}
                                     />
                                 </div>
                                 <div className="flex items-end">

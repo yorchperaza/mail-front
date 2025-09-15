@@ -97,12 +97,11 @@ export default function CompanySidebar() {
             title: 'Messaging',
             icon: EnvelopeOpenIcon,
             children: [
-                { title: 'SMTP credentials', href: `${base}/messaging/smtp` },
-                { title: 'IP pools', href: `${base}/ip-pools` },
                 { title: 'Messages', href: `${base}/messaging/messages` },
                 { title: 'Events', href: `${base}/messaging/events` },
                 { title: 'Inbound routes', href: `${base}/inbound/routes` },
                 { title: 'Inbound messages', href: `${base}/inbound/messages` },
+                { title: 'IP pools', href: `${base}/ip-pools` },
             ],
         },
         {

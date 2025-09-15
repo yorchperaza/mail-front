@@ -7,7 +7,7 @@ import {
     ArrowLeftIcon,
     InformationCircleIcon,
     FunnelIcon,
-    PaperAirplaneIcon,
+    // PaperAirplaneIcon, // [forward removed]
     ArchiveBoxIcon,
     StopIcon,
     ShieldCheckIcon,
@@ -32,11 +32,17 @@ type DomainBrief = { id: number; domain: string | null };
 
 type ExpressionType = 'match_header' | 'match_recipient' | 'match_sender' | 'catch_all';
 
-type Destination =
-    | { type: 'forward'; to: string[]; meta?: { priority?: number; description?: string } }
-    | { type: 'store';   notify: string[]; meta?: { priority?: number; description?: string } };
+// Forward option removed. Keeping a commented stub for a future re‑enable.
+// type Destination =
+//     | { type: 'forward'; to: string[]; meta?: { priority?: number; description?: string } }
+//     | { type: 'store';   notify: string[]; meta?: { priority?: number; description?: string } };
 
-type RouteAction = 'forward' | 'store' | 'stop';
+// Only "store" destination remains
+type Destination = { type: 'store'; notify: string[]; meta?: { priority?: number; description?: string } };
+
+// Forward action removed from allowed actions
+// type RouteAction = 'forward' | 'store' | 'stop';
+type RouteAction = 'store' | 'stop';
 
 type CreateRoutePayload = {
     pattern: string;
@@ -172,12 +178,12 @@ export default function InboundRouteCreateLikeMailgunPage() {
     const [sender, setSender] = useState('');
 
     // Actions (toggles)
-    const [forwardOn, setForwardOn] = useState(false);
+    // const [forwardOn, setForwardOn] = useState(false); // [forward removed]
     const [storeOn, setStoreOn] = useState(false);
     const [stopOn, setStopOn] = useState(false);
 
     // Action payloads
-    const [forwardDestinations, setForwardDestinations] = useState('');
+    // const [forwardDestinations, setForwardDestinations] = useState(''); // [forward removed]
     const [storeNotifyUrls, setStoreNotifyUrls] = useState('');
 
     // Priority / Description
@@ -211,15 +217,12 @@ export default function InboundRouteCreateLikeMailgunPage() {
             return 'Sender pattern is required.';
         }
 
-        // At least one action must be selected
-        if (!forwardOn && !storeOn && !stopOn) {
-            return 'Select at least one action (Forward, Store & notify, or Stop).';
+        // At least one action must be selected (only Store or Stop now)
+        if (!storeOn && !stopOn) {
+            return 'Select at least one action (Store & notify, or Stop).';
         }
 
-        if (forwardOn && !forwardDestinations.trim()) {
-            return 'Forward destinations are required when Forward is enabled.';
-        }
-
+        // Forward validations removed
         if (spamThreshold.trim() !== '' && !isNumber(spamThreshold)) {
             return 'Spam threshold must be a number.';
         }
@@ -244,25 +247,15 @@ export default function InboundRouteCreateLikeMailgunPage() {
             headerName, headerValue, recipient, sender,
         });
 
-        // Build outbound action + destination
-        const selected: Array<'forward' | 'store' | 'stop'> = [];
-        if (forwardOn) selected.push('forward');
+        // Build outbound action + destination (forward removed)
+        const selected: Array<'store' | 'stop'> = [];
         if (storeOn) selected.push('store');
         if (stopOn) selected.push('stop');
 
         const primary = selected[0];
 
         let destination: Destination | undefined;
-        if (primary === 'forward') {
-            destination = {
-                type: 'forward',
-                to: splitCSV(forwardDestinations),
-                meta: {
-                    priority: priority.trim() === '' ? undefined : Number(priority),
-                    description: description.trim() || undefined,
-                },
-            };
-        } else if (primary === 'store') {
+        if (primary === 'store') {
             destination = {
                 type: 'store',
                 notify: splitCSV(storeNotifyUrls),
@@ -272,6 +265,7 @@ export default function InboundRouteCreateLikeMailgunPage() {
                 },
             };
         } else {
+            // For stop, we keep the same backend shape (destination optional / harmless)
             destination = {
                 type: 'store',
                 notify: [],
@@ -292,7 +286,7 @@ export default function InboundRouteCreateLikeMailgunPage() {
         };
         if (spamThreshold.trim() !== '') payload.spam_threshold = Number(spamThreshold);
 
-        if (destination && (forwardOn || storeOn || stopOn)) {
+        if (destination && (storeOn || stopOn)) {
             (destination.meta ||= {}).description =
                 [
                     (destination.meta?.description || description || '').trim(),
@@ -548,37 +542,23 @@ export default function InboundRouteCreateLikeMailgunPage() {
                     </div>
 
                     <div className="p-6 space-y-6">
-                        {/* Forward Action */}
-                        <div className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors">
-                            <div className="flex items-start gap-3">
-                                <input
-                                    type="checkbox"
-                                    checked={forwardOn}
-                                    onChange={(e) => setForwardOn(e.target.checked)}
-                                    id="act-forward"
-                                    className="mt-1 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                                />
-                                <div className="flex-1">
-                                    <label htmlFor="act-forward" className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
-                                        <PaperAirplaneIcon className="h-4 w-4 text-blue-600" />
-                                        Forward
-                                    </label>
-                                    <p className="mt-1 text-sm text-gray-600">
-                                        Forwards the message to a specified destination, which can be another email address or a URL.
-                                        You can combine multiple destinations by separating them with commas.
-                                    </p>
-                                    {forwardOn && (
-                                        <textarea
-                                            rows={2}
-                                            placeholder="address@example.com, https://myapp.com/messages"
-                                            value={forwardDestinations}
-                                            onChange={(e) => setForwardDestinations(e.target.value)}
-                                            className="mt-3 w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                                        />
-                                    )}
+                        {/* Forward Action removed (commented for future implementation) */}
+                        {false && (
+                            <div className="rounded-lg border border-gray-200 p-4">
+                                <div className="flex items-start gap-3">
+                                    <input type="checkbox" id="act-forward" className="mt-1 rounded border-gray-300" />
+                                    <div className="flex-1">
+                                        <label htmlFor="act-forward" className="flex items-center gap-2 text-sm font-medium text-gray-900 cursor-pointer">
+                                            {/* <PaperAirplaneIcon className="h-4 w-4 text-blue-600" /> */}
+                                            Forward (disabled)
+                                        </label>
+                                        <p className="mt-1 text-sm text-gray-600">
+                                            This option has been temporarily removed and will return in a future version.
+                                        </p>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Store Action */}
                         <div className="rounded-lg border border-gray-200 p-4 hover:border-gray-300 transition-colors">
@@ -597,7 +577,7 @@ export default function InboundRouteCreateLikeMailgunPage() {
                                     </label>
                                     <p className="mt-1 text-sm text-gray-600">
                                         Stores the message temporarily so you can retrieve it later. You can combine multiple
-                                        retrieval callback URLs separated by commas. If you don&#39;t specify a URL, you can fetch
+                                        retrieval callback URLs separated by commas. If you don&apos;t specify a URL, you can fetch
                                         the message later via API.
                                     </p>
                                     {storeOn && (
@@ -695,7 +675,7 @@ export default function InboundRouteCreateLikeMailgunPage() {
                                         className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
                                         placeholder="e.g. 5.0"
                                         type="number"
-                                        step="0.1"
+                                        step={0.1}
                                     />
                                 </div>
                                 <div className="flex items-end">
