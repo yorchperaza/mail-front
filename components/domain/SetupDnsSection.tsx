@@ -38,6 +38,10 @@ type VerificationRecords = {
     dmarc?: VerificationRecord;
     mx?: VerificationRecord;
     dkim?: VerificationRecord;
+
+    // NEW (verification outputs if your verifier returns them)
+    tlsrpt?: VerificationRecord;
+    mta_sts?: VerificationRecord;
 };
 
 type VerificationReport = {
@@ -45,7 +49,7 @@ type VerificationReport = {
     records?: VerificationRecords;
 };
 
-/* ---------- Helpers (safe object access, no any) ---------- */
+/* ---------- Helpers ---------- */
 function getObj<T extends object = Record<string, unknown>>(v: unknown): T | null {
     return v && typeof v === 'object' ? (v as T) : null;
 }
@@ -114,9 +118,9 @@ function RecordRow({
     return (
         <tr className="hover:bg-gray-50 transition-colors">
             <td className="px-4 py-3 text-sm">
-        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-semibold border ${typeClass}`}>
-          {type}
-        </span>
+                <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-semibold border ${typeClass}`}>
+                    {type}
+                </span>
             </td>
             <td className="px-4 py-3">
                 <CodeChip>{name || '—'}</CodeChip>
@@ -131,8 +135,8 @@ function RecordRow({
             <td className="px-4 py-3 text-sm text-gray-900">
                 {typeof priority === 'number' ? (
                     <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
-            {priority}
-          </span>
+                        {priority}
+                    </span>
                 ) : (
                     '—'
                 )}
@@ -190,17 +194,13 @@ function StatusBadge({ status }: { status?: string }) {
         <span
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${config.bgClass} ${config.textClass} border ${config.borderClass}`}
         >
-      <Icon className="h-3.5 w-3.5" />
+            <Icon className="h-3.5 w-3.5" />
             {config.label}
-    </span>
+        </span>
     );
 }
 
-function VerificationDetails({
-                                 record,
-                             }: {
-    record?: { host?: string; expected?: unknown; found?: unknown; errors?: unknown };
-}) {
+function VerificationDetails({ record }: { record?: { host?: string; expected?: unknown; found?: unknown; errors?: unknown } }) {
     if (!record) return null;
 
     const PrettyValue = ({ value, type }: { value: unknown; type: 'expected' | 'found' | 'error' }) => {
@@ -210,7 +210,6 @@ function VerificationDetails({
             error: 'bg-red-50 border-red-200',
         };
 
-        // render only strings, never unknown → string
         const text =
             typeof value === 'string'
                 ? value
@@ -224,37 +223,29 @@ function VerificationDetails({
 
         return (
             <pre className={`whitespace-pre-wrap break-all text-xs rounded-lg p-3 border font-mono ${colorClasses[type]}`}>
-        {text}
-      </pre>
+                {text}
+            </pre>
         );
     };
 
     return (
         <div className="mt-4 grid sm:grid-cols-3 gap-4">
             <div>
-                <div className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-2">
-                    Host / Name
-                </div>
+                <div className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-2">Host / Name</div>
                 {record.host ? <CodeChip>{record.host}</CodeChip> : <span className="text-sm text-gray-500">Not specified</span>}
             </div>
 
             <div>
-                <div className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-2">
-                    Expected Value
-                </div>
+                <div className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-2">Expected Value</div>
                 <PrettyValue value={record.expected ?? '—'} type="expected" />
             </div>
 
             <div>
-                <div className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-2">
-                    Found Value
-                </div>
+                <div className="text-xs font-medium text-gray-600 uppercase tracking-wider mb-2">Found Value</div>
                 <PrettyValue value={record.found ?? '—'} type="found" />
                 {record.errors !== undefined && record.errors !== null && (
                     <div className="mt-3">
-                        <div className="text-xs font-medium text-red-700 uppercase tracking-wider mb-2">
-                            Errors
-                        </div>
+                        <div className="text-xs font-medium text-red-700 uppercase tracking-wider mb-2">Errors</div>
                         <PrettyValue value={record.errors} type="error" />
                     </div>
                 )}
@@ -334,6 +325,21 @@ export default function SetupDnsSection({
     const recObj = getObj(detail.records);
     const dkim = (recObj?.dkim_expected ?? null) as DkimExpected | null;
 
+    // NEW: TLS-RPT & MTA-STS expected (from controller)
+    const tlsrpt = getObj(recObj?.tlsrpt) as
+        | { name?: string; type?: string; value?: string; ttl?: number | string; rua?: string }
+        | null;
+
+    const mtaSts = getObj(recObj?.mta_sts) as
+        | {
+        policy_txt?: { name?: string; type?: string; value?: string; ttl?: number | string };
+        host?: { name?: string; type?: string; value?: string; ttl?: number | string };
+        acme_delegate?: { name?: string; type?: string; value?: string; ttl?: number | string };
+    }
+        | null;
+
+    const mtaStsPolicyUrl = (recObj?.mta_sts_policy_url as string | undefined) ?? undefined;
+
     // Verification report — no any
     const detailObj = getObj(detail) as Record<string, unknown> | null;
     const report = (detailObj?.verification_report ?? null) as VerificationReport | null;
@@ -402,10 +408,14 @@ export default function SetupDnsSection({
                         <thead className="bg-gray-50">
                         <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name / Host</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Name / Host
+                            </th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value</th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Priority</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Priority
+                            </th>
                         </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
@@ -417,8 +427,8 @@ export default function SetupDnsSection({
                 <VerificationDetails record={recs?.verification_txt} />
 
                 <InfoNote>
-                    <strong>Note:</strong> Use <code className="font-mono">@</code> for the root domain. TTL can be set to 3600
-                    seconds (1 hour) or &quot;Auto&quot; if available.
+                    <strong>Note:</strong> Use <code className="font-mono">@</code> for the root domain. TTL can be set to 3600 seconds
+                    (1 hour) or &quot;Auto&quot; if available.
                 </InfoNote>
             </DnsStepCard>
 
@@ -436,10 +446,14 @@ export default function SetupDnsSection({
                         <thead className="bg-gray-50">
                         <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name / Host</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Name / Host
+                            </th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value</th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Priority</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Priority
+                            </th>
                         </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
@@ -451,8 +465,9 @@ export default function SetupDnsSection({
                 <VerificationDetails record={recs?.spf} />
 
                 <InfoNote>
-                    <strong>Important:</strong> Only one SPF record is allowed per domain. If you have existing SPF records, merge
-                    them into a single record. Example: <code className="font-mono text-xs">v=spf1 include:monkeysmail.com include:google.com ~all</code>
+                    <strong>Important:</strong> Only one SPF record is allowed per domain. If you have existing SPF records, merge them
+                    into a single record. Example:{' '}
+                    <code className="font-mono text-xs">v=spf1 include:monkeysmail.com include:google.com ~all</code>
                 </InfoNote>
             </DnsStepCard>
 
@@ -470,10 +485,14 @@ export default function SetupDnsSection({
                         <thead className="bg-gray-50">
                         <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name / Host</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Name / Host
+                            </th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value</th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Priority</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Priority
+                            </th>
                         </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
@@ -486,7 +505,8 @@ export default function SetupDnsSection({
 
                 <InfoNote>
                     <strong>Recommendation:</strong> Start with <code className="font-mono">p=none</code> for monitoring. After
-                    analyzing reports, gradually move to <code className="font-mono">p=quarantine</code> or <code className="font-mono">p=reject</code> for full protection.
+                    analyzing reports, gradually move to <code className="font-mono">p=quarantine</code> or{' '}
+                    <code className="font-mono">p=reject</code> for full protection.
                 </InfoNote>
             </DnsStepCard>
 
@@ -504,10 +524,16 @@ export default function SetupDnsSection({
                         <thead className="bg-gray-50">
                         <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name / Host</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value / Target</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Name / Host
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Value / Target
+                            </th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Priority</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Priority
+                            </th>
                         </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
@@ -551,10 +577,14 @@ export default function SetupDnsSection({
                         <thead className="bg-gray-50">
                         <tr>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name / Host</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Name / Host
+                            </th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value</th>
                             <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Priority</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Priority
+                            </th>
                         </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100 bg-white">
@@ -569,6 +599,123 @@ export default function SetupDnsSection({
                     <strong>Important:</strong> Include the complete DKIM value starting with
                     <code className="font-mono"> v=DKIM1; k=rsa; p=…</code>. The selector is the subdomain before{' '}
                     <code className="font-mono">._domainkey</code>.
+                </InfoNote>
+            </DnsStepCard>
+
+            {/* NEW Step 6: TLS-RPT Reporting */}
+            <DnsStepCard
+                step={6}
+                title="TLS-RPT Reporting"
+                status={recs?.tlsrpt?.status}
+                subtitle="Enable SMTP TLS failure reports"
+                icon={<ShieldCheckIcon className="h-5 w-5" />}
+                color="blue"
+            >
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Name / Host
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Priority
+                            </th>
+                        </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                        <RecordRow
+                            type={tlsrpt?.type ?? 'TXT'}
+                            name={tlsrpt?.name ?? `_smtp._tls.${domain}`}
+                            value={tlsrpt?.value ?? 'v=TLSRPTv1; rua=mailto:tlsrpt@monkeyslegion.com'}
+                            ttl={`${tlsrpt?.ttl ?? '3600'}`}
+                        />
+                        </tbody>
+                    </table>
+                </div>
+
+                <VerificationDetails record={recs?.tlsrpt} />
+
+                <InfoNote>
+                    <strong>Tip:</strong> The report address can be your mailbox (e.g.{' '}
+                    <code className="font-mono">mailto:tlsrpt@{domain}</code>) or our managed inbox{' '}
+                    <code className="font-mono">mailto:tlsrpt@monkeyslegion.com</code>.
+                </InfoNote>
+            </DnsStepCard>
+
+            {/* NEW Step 7: MTA-STS */}
+            <DnsStepCard
+                step={7}
+                title="MTA-STS Policy"
+                status={recs?.mta_sts?.status}
+                subtitle="Enforce TLS for inbound mail delivery"
+                icon={<InformationCircleIcon className="h-5 w-5" />}
+                color="emerald"
+            >
+                <div className="overflow-hidden rounded-lg border border-gray-200">
+                    <table className="min-w-full divide-y divide-gray-200">
+                        <thead className="bg-gray-50">
+                        <tr>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Name / Host
+                            </th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Value</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">TTL</th>
+                            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                Priority
+                            </th>
+                        </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                        {/* TXT id */}
+                        <RecordRow
+                            type={mtaSts?.policy_txt?.type ?? 'TXT'}
+                            name={mtaSts?.policy_txt?.name ?? `_mta-sts.${domain}`}
+                            value={mtaSts?.policy_txt?.value ?? 'v=STSv1; id=sts-YYYYMMDD'}
+                            ttl={`${mtaSts?.policy_txt?.ttl ?? '3600'}`}
+                        />
+                        {/* mta-sts host (CNAME to managed edge) */}
+                        <RecordRow
+                            type={mtaSts?.host?.type ?? 'CNAME'}
+                            name={mtaSts?.host?.name ?? `mta-sts.${domain}`}
+                            value={mtaSts?.host?.value ?? 'mta-sts.monkeysmail.com.'}
+                            ttl={`${mtaSts?.host?.ttl ?? '3600'}`}
+                        />
+                        {/* Optional ACME delegation for certs */}
+                        <RecordRow
+                            type={mtaSts?.acme_delegate?.type ?? 'CNAME'}
+                            name={mtaSts?.acme_delegate?.name ?? `_acme-challenge.mta-sts.${domain}`}
+                            value={mtaSts?.acme_delegate?.value ?? `_acme-challenge.${domain}.auth.monkeysmail.com.`}
+                            ttl={`${mtaSts?.acme_delegate?.ttl ?? '3600'}`}
+                        />
+                        </tbody>
+                    </table>
+                </div>
+
+                <VerificationDetails record={recs?.mta_sts} />
+
+                <InfoNote>
+                    <div className="space-y-1">
+                        <div>
+                            <strong>Policy URL:</strong>{' '}
+                            <a
+                                href={mtaStsPolicyUrl || 'https://mta-sts.monkeysmail.com/.well-known/mta-sts.txt'}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="underline"
+                            >
+                                {mtaStsPolicyUrl || 'https://mta-sts.monkeysmail.com/.well-known/mta-sts.txt'}
+                            </a>
+                        </div>
+                        <div>
+                            After publishing the DNS records, set your policy file at the URL above. We host a managed policy if you
+                            use our CNAME.
+                        </div>
+                    </div>
                 </InfoNote>
             </DnsStepCard>
 

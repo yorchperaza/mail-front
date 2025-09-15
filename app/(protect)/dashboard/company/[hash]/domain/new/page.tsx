@@ -19,9 +19,7 @@ import { CheckCircleIcon as CheckCircleSolid } from '@heroicons/react/24/solid';
 /* ----------------------------- Types ----------------------------- */
 
 type TxtLike = string | { name?: string; value: string };
-
 type DnsTxt = TxtLike;
-
 type DnsMx = string | { host: string; priority?: number };
 
 type DnsDkim =
@@ -29,11 +27,29 @@ type DnsDkim =
     | { name: string; value: string }
     | null;
 
+type TlsRptRecord = {
+    name?: string;
+    type?: string;     // usually TXT
+    value?: string;    // e.g. "v=TLSRPTv1; rua=mailto:tlsrpt@…"
+    rua?: string;      // optional echo
+};
+
+type MtaStsDnsRow = { name?: string; type?: 'TXT' | 'CNAME'; value?: string; ttl?: number | string };
+type MtaStsRecord = {
+    policy_txt?: MtaStsDnsRow;  // _mta-sts.<domain>  TXT  v=STSv1; id=…
+    host?: MtaStsDnsRow;        // mta-sts.<domain>   CNAME <managed-edge>.
+    acme_delegate?: MtaStsDnsRow; // _acme-challenge.mta-sts.<domain> CNAME …
+};
+
 type DnsRecords = {
-    spf_expected?: TxtLike | TxtLike[] | null;   // simplified to avoid array inside the item
-    dmarc_expected?: TxtLike | null;             // simplified to a single TXT-like
+    spf_expected?: TxtLike | TxtLike[] | null;
+    dmarc_expected?: TxtLike | null;
     mx_expected?: DnsMx[] | null;
     dkim?: DnsDkim;
+
+    // NEW
+    tlsrpt?: TlsRptRecord | null;
+    mta_sts?: MtaStsRecord | null;
 };
 
 type CreatedDomain = {
@@ -54,11 +70,7 @@ type CreatedDomain = {
     };
 };
 
-type ApiError = {
-    error: true;
-    message: string;
-    fields?: Record<string, string>;
-};
+type ApiError = { error: true; message: string; fields?: Record<string, string> };
 
 /* --------------------------- UI Helpers -------------------------- */
 
@@ -85,12 +97,7 @@ function Toast({
         >
             <div className="flex items-center gap-3">
                 <span className="text-sm font-medium">{text}</span>
-                <button
-                    onClick={onClose}
-                    className="rounded-lg p-1 hover:bg-white/40 transition-colors"
-                    aria-label="Close"
-                    title="Close"
-                >
+                <button onClick={onClose} className="rounded-lg p-1 hover:bg-white/40 transition-colors" aria-label="Close" title="Close">
                     <XMarkIcon className="h-4 w-4" />
                 </button>
             </div>
@@ -126,13 +133,9 @@ function GradientSection({
 
 /* ---------------------------- Utilities -------------------------- */
 
-const DOMAIN_RE =
-    /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+const DOMAIN_RE = /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
 
-const copy = async (
-    text: string,
-    toast: (k: 'info' | 'success' | 'error', t: string) => void
-) => {
+const copy = async (text: string, toast: (k: 'info' | 'success' | 'error', t: string) => void) => {
     try {
         await navigator.clipboard.writeText(text);
         toast('success', 'Copied to clipboard');
@@ -169,26 +172,62 @@ function mxToRows(v: DnsRecords['mx_expected']): Array<{ name: string; value: st
 function dkimToRows(d: DnsDkim): Array<{ name: string; value: string }> {
     if (!d) return [];
 
-    // legacy single-object shape: { name: 'selector._domainkey', value: 'v=DKIM1; ...' }
-    if (typeof d === 'object' && 'name' in d && 'value' in d) {
-        return [{ name: d.name as string, value: d.value as string }];
-    }
+    // Legacy single-object shape: { name: 'selector._domainkey', value: 'v=DKIM1; ...' }
+    if (typeof d === 'object' && !Array.isArray(d)) {
+        const rec = d as Record<string, unknown>;
+        const maybeName = rec['name'];
+        const maybeValue = rec['value'];
 
-    // map shape: { selector: 'v=DKIM1; ...' } or { selector: { value: 'v=DKIM1; ...' } }
-    const out: Array<{ name: string; value: string }> = [];
-    for (const key of Object.keys(d as Record<string, unknown>)) {
-        const v = (d as Record<string, unknown>)[key];
-        if (typeof v === 'string') {
-            out.push({ name: `${key}._domainkey`, value: v });
-        } else if (v && typeof v === 'object') {
-            const val = (v as { value?: string }).value;
-            if (typeof val === 'string') {
-                const sel = (v as { selector?: string }).selector ?? key;
-                out.push({ name: `${sel}._domainkey`, value: val });
-            }
+        if (typeof maybeName === 'string' && typeof maybeValue === 'string') {
+            return [{ name: maybeName, value: maybeValue }];
         }
     }
+
+    // Map shape: { selector: 'v=DKIM1; ...' } or { selector: { value: 'v=DKIM1; ...' } }
+    const out: Array<{ name: string; value: string }> = [];
+    const obj = d as Record<string, unknown>;
+
+    for (const key of Object.keys(obj)) {
+        const v = obj[key];
+
+        if (typeof v === 'string') {
+            out.push({ name: `${key}._domainkey`, value: v });
+            continue;
+        }
+
+        if (v && typeof v === 'object') {
+            const vo = v as Record<string, unknown>;
+            const val = typeof vo['value'] === 'string' ? (vo['value'] as string) : undefined;
+            if (!val) continue;
+
+            const sel =
+                typeof vo['selector'] === 'string' ? (vo['selector'] as string) : key;
+
+            out.push({ name: `${sel}._domainkey`, value: val });
+        }
+    }
+
     return out;
+}
+
+/* NEW: TLS-RPT → one row (TXT at _smtp._tls.<domain>) */
+function tlsRptToRow(rec?: TlsRptRecord | null): { name: string; value: string } | null {
+    if (!rec) return null;
+    const name = rec.name || '';
+    const value = rec.value || '';
+    if (!name || !value) return null;
+    return { name, value };
+}
+
+/* NEW: MTA-STS → up to three rows (TXT + CNAME + CNAME) */
+function mtaStsToRows(rec?: MtaStsRecord | null): Array<{ type: 'TXT' | 'CNAME'; name: string; value: string }> {
+    if (!rec) return [];
+    const rows: Array<{ type: 'TXT' | 'CNAME'; name: string; value: string }> = [];
+    if (rec.policy_txt?.name && rec.policy_txt.value) rows.push({ type: 'TXT', name: rec.policy_txt.name, value: rec.policy_txt.value });
+    if (rec.host?.name && rec.host.value) rows.push({ type: 'CNAME', name: rec.host.name, value: rec.host.value });
+    if (rec.acme_delegate?.name && rec.acme_delegate.value)
+        rows.push({ type: 'CNAME', name: rec.acme_delegate.name, value: rec.acme_delegate.value });
+    return rows;
 }
 
 /* ---------------------------- Page ------------------------------- */
@@ -243,18 +282,26 @@ export default function CreateDomainPage() {
             });
 
             if (!res.ok) {
-                const errJson: ApiError = await res
-                    .json()
-                    .catch(() => ({ error: true, message: `Create failed (${res.status})` } as ApiError));
+                const errJson: ApiError = await res.json().catch(() => ({ error: true, message: `Create failed (${res.status})` } as ApiError));
                 setApiError(errJson);
                 showToast('error', errJson.message || 'Create failed');
                 return;
             }
 
             const payload = (await res.json()) as CreatedDomain;
-            // defensive defaults for optional fields
+            // Defensive defaults so the UI never explodes on optional fields
             payload.records = payload.records || {};
+            payload.records.mx_expected = payload.records.mx_expected ?? null;
+            payload.records.spf_expected = payload.records.spf_expected ?? null;
+            payload.records.dmarc_expected = payload.records.dmarc_expected ?? null;
+            payload.records.dkim = payload.records.dkim ?? null;
+
+            // NEW: ensure TLS-RPT/MTA-STS presence even if backend omitted
+            payload.records.tlsrpt = payload.records.tlsrpt ?? null;
+            payload.records.mta_sts = payload.records.mta_sts ?? null;
+
             payload.txt = payload.txt ?? null;
+
             setCreated(payload);
             showToast('success', `Domain "${payload.domain}" created`);
         } catch (e) {
@@ -267,15 +314,19 @@ export default function CreateDomainPage() {
     }
 
     // Derived DNS rows
-    const spfRows = useMemo(() => spfToRows(created?.records?.spf_expected ?? null), [created]);
+    const spfRows  = useMemo(() => spfToRows(created?.records?.spf_expected ?? null), [created]);
     const dmarcRow = useMemo(() => dmarcToRow(created?.records?.dmarc_expected ?? null), [created]);
-    const mxRows = useMemo(() => mxToRows(created?.records?.mx_expected ?? null), [created]);
+    const mxRows   = useMemo(() => mxToRows(created?.records?.mx_expected ?? null), [created]);
     const dkimRows = useMemo(() => dkimToRows(created?.records?.dkim ?? null), [created]);
     const extraTxt = useMemo(() => {
         const t = created?.txt;
         if (!t) return [];
         return Array.isArray(t) ? t.map(txtToRow) : [txtToRow(t)];
     }, [created]);
+
+    // NEW derived rows
+    const tlsRptRow = useMemo(() => tlsRptToRow(created?.records?.tlsrpt ?? null), [created]);
+    const mtaStsRows = useMemo(() => mtaStsToRows(created?.records?.mta_sts ?? null), [created]);
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
@@ -301,12 +352,7 @@ export default function CreateDomainPage() {
                 </div>
 
                 {/* Create Domain */}
-                <GradientSection
-                    icon={<GlobeAltIcon className="h-5 w-5" />}
-                    title="Domain Details"
-                    from="from-blue-500"
-                    to="to-blue-600"
-                >
+                <GradientSection icon={<GlobeAltIcon className="h-5 w-5" />} title="Domain Details" from="from-blue-500" to="to-blue-600">
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             <GlobeAltIcon className="inline h-4 w-4 mr-1 text-gray-400" />
@@ -368,12 +414,7 @@ export default function CreateDomainPage() {
 
                 {/* DNS Instructions (only after create) */}
                 <div className={`${created ? 'opacity-100' : 'opacity-50 pointer-events-none'} transition-opacity`}>
-                    <GradientSection
-                        icon={<ShieldCheckIcon className="h-5 w-5" />}
-                        title="Verify DNS"
-                        from="from-indigo-500"
-                        to="to-indigo-600"
-                    >
+                    <GradientSection icon={<ShieldCheckIcon className="h-5 w-5" />} title="Verify DNS" from="from-indigo-500" to="to-indigo-600">
                         <p className="text-sm text-gray-600 -mt-1">
                             Add the DNS records below at your DNS provider for <span className="font-semibold">{created?.domain || 'your domain'}</span>.
                             After adding, return to the Domains list to verify.
@@ -463,6 +504,42 @@ export default function CreateDomainPage() {
                                         </td>
                                     </tr>
                                 ))}
+
+                                {/* NEW: TLS-RPT */}
+                                {tlsRptRow && (
+                                    <tr className="hover:bg-gray-50">
+                                        <td className="px-4 py-3 font-mono">TXT</td>
+                                        <td className="px-4 py-3 font-mono">{tlsRptRow.name}</td>
+                                        <td className="px-4 py-3 font-mono break-all">{tlsRptRow.value}</td>
+                                        <td className="px-4 py-3">3600</td>
+                                        <td className="px-2 py-3 text-right">
+                                            <button
+                                                onClick={() => copy(tlsRptRow.value, showToast)}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
+                                            >
+                                                <DocumentDuplicateIcon className="h-4 w-4" /> Copy
+                                            </button>
+                                        </td>
+                                    </tr>
+                                )}
+
+                                {/* NEW: MTA-STS (up to 3 rows) */}
+                                {mtaStsRows.map((r, i) => (
+                                    <tr key={`mta-sts-${i}`} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3 font-mono">{r.type}</td>
+                                        <td className="px-4 py-3 font-mono">{r.name}</td>
+                                        <td className="px-4 py-3 font-mono break-all">{r.value}</td>
+                                        <td className="px-4 py-3">3600</td>
+                                        <td className="px-2 py-3 text-right">
+                                            <button
+                                                onClick={() => copy(r.value, showToast)}
+                                                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
+                                            >
+                                                <DocumentDuplicateIcon className="h-4 w-4" /> Copy
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
                                 </tbody>
                             </table>
                         </div>
@@ -526,77 +603,70 @@ export default function CreateDomainPage() {
 
                 {/* SMTP Credentials */}
                 {created && created.smtp && (
-                    <>
-                        <GradientSection
-                            icon={<InformationCircleIcon className="h-5 w-5" />}
-                            title="SMTP Credentials"
-                            from="from-emerald-500"
-                            to="to-emerald-600"
-                        >
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="rounded-lg border border-gray-200 p-4">
-                                    <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">Server</div>
-                                    <div className="space-y-1 text-sm">
-                                        <div><span className="text-gray-500">Host:</span> <span className="font-mono">{created.smtp.host}</span></div>
-                                        <div><span className="text-gray-500">IP:</span> <span className="font-mono">{created.smtp.ip}</span></div>
-                                        <div><span className="text-gray-500">Ports:</span> <span className="font-mono">{created.smtp.ports.join(', ')}</span></div>
+                    <GradientSection
+                        icon={<InformationCircleIcon className="h-5 w-5" />}
+                        title="SMTP Credentials"
+                        from="from-emerald-500"
+                        to="to-emerald-600"
+                    >
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div className="rounded-lg border border-gray-200 p-4">
+                                <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">Server</div>
+                                <div className="space-y-1 text-sm">
+                                    <div><span className="text-gray-500">Host:</span> <span className="font-mono">{created.smtp.host}</span></div>
+                                    <div><span className="text-gray-500">IP:</span> <span className="font-mono">{created.smtp.ip}</span></div>
+                                    <div><span className="text-gray-500">Ports:</span> <span className="font-mono">{created.smtp.ports.join(', ')}</span></div>
+                                    <div>
+                                        <span className="text-gray-500">TLS:</span>{' '}
+                                        <span className="font-mono">STARTTLS={String(created.smtp.tls.starttls)} • ImplicitTLS={String(created.smtp.tls.implicit)}</span>
+                                    </div>
+                                    {created.smtp.ip_pool && (
+                                        <div><span className="text-gray-500">IP Pool:</span> <span className="font-mono">{created.smtp.ip_pool}</span></div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="rounded-lg border border-gray-200 p-4">
+                                <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">Credentials</div>
+                                <div className="space-y-3 text-sm">
+                                    <div className="flex items-center justify-between gap-2">
                                         <div>
-                                            <span className="text-gray-500">TLS:</span>{' '}
-                                            <span className="font-mono">STARTTLS={String(created.smtp.tls.starttls)} • ImplicitTLS={String(created.smtp.tls.implicit)}</span>
+                                            <div className="text-gray-500">Username</div>
+                                            <div className="font-mono break-all">{created.smtp.username}</div>
                                         </div>
-                                        {created.smtp.ip_pool && (
-                                            <div><span className="text-gray-500">IP Pool:</span> <span className="font-mono">{created.smtp.ip_pool}</span></div>
-                                        )}
+                                        <button
+                                            onClick={() => copy(created.smtp.username, showToast)}
+                                            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
+                                        >
+                                            <DocumentDuplicateIcon className="h-4 w-4" /> Copy
+                                        </button>
                                     </div>
-                                </div>
 
-                                <div className="rounded-lg border border-gray-200 p-4">
-                                    <div className="text-xs uppercase tracking-wider text-gray-500 mb-2">Credentials</div>
-                                    <div className="space-y-3 text-sm">
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div>
-                                                <div className="text-gray-500">Username</div>
-                                                <div className="font-mono break-all">{created.smtp.username}</div>
-                                            </div>
-                                            <button
-                                                onClick={() => copy(created.smtp.username, showToast)}
-                                                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
-                                            >
-                                                <DocumentDuplicateIcon className="h-4 w-4" /> Copy
-                                            </button>
+                                    <div className="flex items-center justify-between gap-2">
+                                        <div>
+                                            <div className="text-gray-500">Password</div>
+                                            <div className="font-mono break-all">••••••••••••</div>
                                         </div>
-
-                                        <div className="flex items-center justify-between gap-2">
-                                            <div>
-                                                <div className="text-gray-500">Password</div>
-                                                <div className="font-mono break-all">••••••••••••</div>
-                                            </div>
-                                            <button
-                                                onClick={() => copy(created.smtp.password, showToast)}
-                                                className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
-                                            >
-                                                <DocumentDuplicateIcon className="h-4 w-4" /> Copy
-                                            </button>
-                                        </div>
+                                        <button
+                                            onClick={() => copy(created.smtp.password, showToast)}
+                                            className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-2 py-1 text-xs hover:bg-gray-50"
+                                        >
+                                            <DocumentDuplicateIcon className="h-4 w-4" /> Copy
+                                        </button>
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-blue-900 text-sm flex items-start gap-2">
-                                <InformationCircleIcon className="h-5 w-5 mt-0.5" />
-                                Use port <span className="mx-1 font-semibold">587</span> with STARTTLS in most cases. Port <span className="mx-1 font-semibold">465</span> is for implicit TLS.
-                            </div>
-                        </GradientSection>
-                    </>
+                        <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-blue-900 text-sm flex items-start gap-2">
+                            <InformationCircleIcon className="h-5 w-5 mt-0.5" />
+                            Use port <span className="mx-1 font-semibold">587</span> with STARTTLS in most cases. Port <span className="mx-1 font-semibold">465</span> is for implicit TLS.
+                        </div>
+                    </GradientSection>
                 )}
 
                 {/* Help */}
-                <GradientSection
-                    icon={<InformationCircleIcon className="h-5 w-5" />}
-                    title="Troubleshooting"
-                    from="from-slate-500"
-                    to="to-slate-700"
-                >
+                <GradientSection icon={<InformationCircleIcon className="h-5 w-5" />} title="Troubleshooting" from="from-slate-500" to="to-slate-700">
                     <ul className="list-disc pl-5 text-sm text-gray-700 space-y-1">
                         <li>Use the exact <span className="font-mono">Host</span>/<span className="font-mono">Name</span> shown. Many DNS providers append the domain automatically.</li>
                         <li>Set TTL to 3600 or provider default.</li>
