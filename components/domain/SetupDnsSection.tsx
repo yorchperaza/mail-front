@@ -24,6 +24,31 @@ import type { DomainDetail, MxRecord } from '@/types/domain';
 /* ---------- Types ---------- */
 type DkimExpected = { name?: string; value?: string };
 
+/** A single DNS record expectation (from backend report.expectations) */
+type DnsExpectation = {
+    type: 'TXT' | 'CNAME' | 'MX' | 'A' | string;
+    name: string;
+    value?: string;
+    ttl?: number;
+    priority?: number | null;
+};
+
+/** UI shape for the MTA-STS table rows */
+type MtaStsExpectedGroup = {
+    policy_txt?: DnsExpectation;
+    host?: DnsExpectation;
+    acme_delegate?: DnsExpectation;
+};
+
+/** UI shape for the TLS-RPT table row */
+type TlsRptExpected = {
+    name?: string;
+    type?: string;
+    value?: string;
+    ttl?: number | string;
+    rua?: string;
+};
+
 type VerificationRecord = {
     status?: string;
     host?: string;
@@ -42,11 +67,23 @@ type VerificationRecords = {
     // NEW (verification outputs if your verifier returns them)
     tlsrpt?: VerificationRecord;
     mta_sts?: VerificationRecord;
+
+    // NEW: so recs?.mta_sts_policy?.url is typed
+    mta_sts_policy?: {
+        status?: string;
+        url?: string;
+        http?: { status?: number; error?: string | null };
+        parsed?: unknown;
+        errors?: unknown;
+    };
 };
 
 type VerificationReport = {
     checked_at?: string;
     records?: VerificationRecords;
+
+    // NEW: so report?.expectations is typed
+    expectations?: DnsExpectation[];
 };
 
 /* ---------- Helpers ---------- */
@@ -321,30 +358,77 @@ export default function SetupDnsSection({
     const mx = (detail.records?.mx_expected ?? []) as MxRecord[];
     const dmarcName = `_dmarc.${domain}`;
 
-    // DKIM expected (optional) — no any
+    // DKIM expected (optional)
     const recObj = getObj(detail.records);
     const dkim = (recObj?.dkim_expected ?? null) as DkimExpected | null;
 
-    // NEW: TLS-RPT & MTA-STS expected (from controller)
-    const tlsrpt = getObj(recObj?.tlsrpt) as
-        | { name?: string; type?: string; value?: string; ttl?: number | string; rua?: string }
-        | null;
+    /* ---------- CHANGED: read raw values, we'll add fallbacks later ---------- */
+    const tlsrptRaw = getObj(recObj?.tlsrpt) as TlsRptExpected | null;
 
-    const mtaSts = getObj(recObj?.mta_sts) as
-        | {
-        policy_txt?: { name?: string; type?: string; value?: string; ttl?: number | string };
-        host?: { name?: string; type?: string; value?: string; ttl?: number | string };
-        acme_delegate?: { name?: string; type?: string; value?: string; ttl?: number | string };
-    }
-        | null;
+    const mtaStsRaw = getObj(recObj?.mta_sts) as MtaStsExpectedGroup | null;
 
-    const mtaStsPolicyUrl = (recObj?.mta_sts_policy_url as string | undefined) ?? undefined;
-
-    // Verification report — no any
+    /* ---------- Verification report (for fallbacks) ---------- */
     const detailObj = getObj(detail) as Record<string, unknown> | null;
     const report = (detailObj?.verification_report ?? null) as VerificationReport | null;
     const lastChecked = report?.checked_at ?? ((detailObj?.last_checked_at as string | undefined) ?? null);
     const recs: VerificationRecords = report?.records ?? {};
+
+    /* ---------- NEW: derive expectations map from report.expectations ---------- */
+    const expectations = React.useMemo<Record<string, DnsExpectation>>(() => {
+        const list = report?.expectations ?? [];
+        const byName: Record<string, DnsExpectation> = {};
+        for (const e of list) {
+            if (!e?.name) continue;
+            byName[e.name.toLowerCase()] = e;
+        }
+        return byName;
+    }, [report]);
+
+    /* ---------- NEW: MTA-STS fallback from report.expectations ---------- */
+    const mtaStsFromReport: MtaStsExpectedGroup | null = React.useMemo(() => {
+        if (!report?.expectations) return null;
+        const dn = (detail.domain ?? '').toLowerCase();
+        const txtName = `_mta-sts.${dn}`;
+        const hostName = `mta-sts.${dn}`;
+        const acmeName = `_acme-challenge.mta-sts.${dn}`;
+
+        const policy_txt = expectations[txtName];
+        const host = expectations[hostName];
+        const acme = expectations[acmeName];
+
+        if (!policy_txt && !host && !acme) return null;
+
+        return {
+            policy_txt: policy_txt ?? { type: 'TXT', name: txtName, value: 'v=STSv1; id=sts-YYYYMMDD', ttl: 3600 },
+            host: host ?? { type: 'CNAME', name: hostName, value: 'mta-sts.monkeysmail.com.', ttl: 3600 },
+            acme_delegate:
+                acme ?? { type: 'CNAME', name: acmeName, value: `_acme-challenge.${dn}.auth.monkeysmail.com.`, ttl: 3600 },
+        };
+    }, [expectations, detail.domain, report]);
+
+    /* ---------- NEW: TLS-RPT fallback (no expectations entry; use report.records) ---------- */
+    const tlsrptFromReport: TlsRptExpected = React.useMemo(() => {
+        const dn = (detail.domain ?? '').toLowerCase();
+        const expected = getObj(recs?.tlsrpt)?.expected as string | undefined;
+        return {
+            type: 'TXT',
+            name: `_smtp._tls.${dn}`,
+            value: expected || 'v=TLSRPTv1; rua=mailto:tlsrpt@monkeyslegion.com',
+            ttl: 3600,
+        };
+    }, [detail.domain, recs?.tlsrpt]);
+
+    /* ---------- NEW: final values with fallback ---------- */
+    const mtaSts: MtaStsExpectedGroup | null = mtaStsRaw ?? mtaStsFromReport;
+
+    const tlsrpt: TlsRptExpected =
+        tlsrptRaw ?? tlsrptFromReport;
+
+    /* ---------- NEW: policy URL fallback ---------- */
+    const mtaStsPolicyUrl: string | undefined =
+        (recObj?.mta_sts_policy_url as string | undefined) ??
+        recs?.mta_sts_policy?.url ??
+        `https://mta-sts.${(detail.domain ?? '').toLowerCase()}/.well-known/mta-sts.txt`;
 
     const formatTime = (iso?: string | null) => {
         if (!iso) return 'Never';

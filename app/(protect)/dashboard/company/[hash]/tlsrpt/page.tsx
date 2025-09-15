@@ -2,13 +2,35 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter, usePathname, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import {
-    ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Legend,
-    PieChart, Pie, Cell,
+    ArrowLeftIcon,
+    ShieldCheckIcon,
+    ChartBarIcon,
+    CalendarDaysIcon,
+    CheckCircleIcon,
+    XCircleIcon,
+    ExclamationTriangleIcon,
+    FunnelIcon,
+    ServerStackIcon,
+    DocumentChartBarIcon,
+    GlobeAltIcon,
+    ClockIcon,
+    InboxIcon,
+} from '@heroicons/react/24/outline';
+import {
+    ResponsiveContainer,
+    BarChart,
+    Bar,
+    CartesianGrid,
+    XAxis,
+    YAxis,
+    Tooltip,
+    PieChart,
+    Pie,
+    Cell,
 } from "recharts";
 
-/* ================= Types (tolerant, no `any`) ================= */
+/* ================= Types ================= */
 type IsoString = string;
 type TlsRptWindow = { start: IsoString | null; end: IsoString | null };
 type FailureDetail = {
@@ -21,9 +43,13 @@ type FailureDetail = {
     [k: string]: unknown;
 };
 type TlsRptRow = {
-    id: number; org: string | null; reportId: string | null;
-    window: TlsRptWindow; summary: { success: number; failure: number };
-    details: FailureDetail[] | null; receivedAt: IsoString | null;
+    id: number;
+    org: string | null;
+    reportId: string | null;
+    window: TlsRptWindow;
+    summary: { success: number; failure: number };
+    details: FailureDetail[] | null;
+    receivedAt: IsoString | null;
 };
 type DomainBrief = { id: number; name: string };
 type CompanyTlsRptResponse = {
@@ -36,15 +62,58 @@ type ByStringNumber = Record<string, number>;
 
 /* ================= Helpers ================= */
 const backend = process.env.NEXT_PUBLIC_BACKEND_URL || "";
-const QUICK_RANGES = [7, 14, 30, 60, 90] as const;
+const QUICK_RANGES = [
+    { label: 'Last 7 Days', days: 7 },
+    { label: 'Last 14 Days', days: 14 },
+    { label: 'Last 30 Days', days: 30 },
+    { label: 'Last 60 Days', days: 60 },
+    { label: 'Last 90 Days', days: 90 },
+];
+
+const PIE_COLORS = ['#10b981', '#ef4444'];
 
 function authHeaders(): HeadersInit {
     const token = typeof window !== "undefined" ? localStorage.getItem("jwt") : null;
     return { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) };
 }
-function fmt(n?: number | null) { return n == null || Number.isNaN(n) ? "0" : new Intl.NumberFormat().format(n); }
-function toDateLabel(iso?: string | null) { if (!iso) return "—"; try { return new Date(iso).toLocaleString(); } catch { return String(iso); } }
-function todayYMD() { return new Date().toISOString().slice(0, 10); }
+
+function fmt(n?: number | null) {
+    return n == null || Number.isNaN(n) ? "0" : new Intl.NumberFormat().format(n);
+}
+
+function toDateLabel(iso?: string | null, format: 'short' | 'full' = 'short') {
+    if (!iso) return "—";
+    try {
+        const date = new Date(iso);
+        if (format === 'full') {
+            return date.toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        }
+        return date.toLocaleDateString('en-US', {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric'
+        });
+    } catch {
+        return String(iso);
+    }
+}
+
+function todayYMD() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+function fmtDateUTC(d: Date) {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
 
 /** Aggregate helpful stats from TLS-RPT rows */
 function aggregateTlsrpt(rows: TlsRptRow[]) {
@@ -63,44 +132,71 @@ function aggregateTlsrpt(rows: TlsRptRow[]) {
             byResultType[resType] = (byResultType[resType] || 0) + c;
             const mx = String(d["receiving-mx-hostname"] ?? d["receiving-ip"] ?? "unknown");
             byReceivingMx[mx] = (byReceivingMx[mx] || 0) + c;
-            if (c > 0) topFailures.push({ mx, count: c, reason: typeof d["result_reason_code"] === "string" ? d["result_reason_code"] : undefined });
+            if (c > 0) topFailures.push({
+                mx,
+                count: c,
+                reason: typeof d["result_reason_code"] === "string" ? d["result_reason_code"] : undefined
+            });
         }
     }
     topFailures.sort((a, b) => b.count - a.count);
-    return { success, failure, total: success + failure, byResultType, byReceivingMx, topFailures: topFailures.slice(0, 10) };
+    return {
+        success,
+        failure,
+        total: success + failure,
+        byResultType,
+        byReceivingMx,
+        topFailures: topFailures.slice(0, 10)
+    };
 }
 
-const Skeleton: React.FC<{ className?: string }> = ({ className }) => (
-    <div className={`animate-pulse rounded bg-gray-100 ${className || ""}`} />
-);
+/* ================= Components ================= */
 
-const SegButton: React.FC<{ active: boolean; disabled?: boolean; onClick: () => void; children: React.ReactNode }>
-    = ({ active, disabled, onClick, children }) => (
-    <button
-        onClick={onClick}
-        disabled={disabled}
-        className={[
-            "px-2.5 py-1.5 text-xs rounded-md border",
-            active ? "bg-gray-900 text-white border-gray-900" : "bg-white hover:bg-gray-50 border-gray-300 text-gray-700",
-            disabled ? "opacity-50 cursor-not-allowed" : "",
-        ].join(" ")}
-    >
-        {children}
-    </button>
-);
+function StatCard({ label, value, change, icon, color }: {
+    label: string;
+    value: number;
+    change?: number;
+    icon: React.ReactNode;
+    color: 'blue' | 'emerald' | 'amber' | 'red';
+}) {
+    const colors = {
+        blue: 'from-blue-500 to-blue-600',
+        emerald: 'from-emerald-500 to-emerald-600',
+        amber: 'from-amber-500 to-amber-600',
+        red: 'from-red-500 to-red-600',
+    };
 
-/* ================= Page ================= */
+    return (
+        <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+            <div className={`bg-gradient-to-r ${colors[color]} p-3`}>
+                <div className="flex items-center justify-between text-white">
+                    {icon}
+                    <span className="text-xs font-medium uppercase tracking-wider opacity-90">{label}</span>
+                </div>
+            </div>
+            <div className="p-4">
+                <div className="text-2xl font-bold text-gray-900">{value.toLocaleString()}</div>
+                {change !== undefined && (
+                    <div className={`mt-1 text-xs ${change >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                        {change >= 0 ? '↑' : '↓'} {Math.abs(change)}% from previous
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+/* ================= Main Page Component ================= */
 export default function CompanyTlsRptPage() {
     const router = useRouter();
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const { hash } = useParams<{ hash: string }>();
 
-    // segmented quick range; null === custom
     const [quick, setQuick] = useState<number | null>(30);
-
     const [from, setFrom] = useState<string>(() => {
-        const d = new Date(); d.setUTCDate(d.getUTCDate() - (30 - 1));
+        const d = new Date();
+        d.setUTCDate(d.getUTCDate() - 29);
         return d.toISOString().slice(0, 10);
     });
     const [to, setTo] = useState<string>(() => todayYMD());
@@ -110,7 +206,7 @@ export default function CompanyTlsRptPage() {
     const [data, setData] = useState<CompanyTlsRptResponse | null>(null);
     const [activeDomainId, setActiveDomainId] = useState<number | null>(null);
 
-    // ---------- 1) Hydrate state from URL on first render ----------
+    // Hydrate state from URL on first render
     const didInitFromUrl = useRef(false);
     useEffect(() => {
         if (didInitFromUrl.current) return;
@@ -122,13 +218,14 @@ export default function CompanyTlsRptPage() {
         const t = sp.get("to");
         const d = sp.get("domain");
 
-        // quick range if valid
         if (qStr) {
             const qNum = Number(qStr);
-            if (QUICK_RANGES.includes(qNum as (typeof QUICK_RANGES)[number])) {
+            const range = QUICK_RANGES.find(r => r.days === qNum);
+            if (range) {
                 setQuick(qNum);
                 const end = new Date();
-                const start = new Date(); start.setUTCDate(start.getUTCDate() - (qNum - 1));
+                const start = new Date();
+                start.setUTCDate(start.getUTCDate() - (qNum - 1));
                 setFrom(start.toISOString().slice(0, 10));
                 setTo(end.toISOString().slice(0, 10));
             } else {
@@ -136,7 +233,6 @@ export default function CompanyTlsRptPage() {
             }
         }
 
-        // custom dates override if both present
         if (f && t) {
             setFrom(f);
             setTo(t);
@@ -149,15 +245,13 @@ export default function CompanyTlsRptPage() {
         }
     }, [searchParams]);
 
-    // ---------- 2) Keep URL in sync with state (shareable) ----------
+    // Keep URL in sync with state
     useEffect(() => {
-        // Build query: include only meaningful params
         const qs = new URLSearchParams();
 
-        if (quick && QUICK_RANGES.includes(quick as (typeof QUICK_RANGES)[number])) {
+        if (quick && QUICK_RANGES.find(r => r.days === quick)) {
             qs.set("q", String(quick));
         } else {
-            // custom: encode explicit dates
             if (from) qs.set("from", from);
             if (to) qs.set("to", to);
         }
@@ -166,30 +260,30 @@ export default function CompanyTlsRptPage() {
             qs.set("domain", String(activeDomainId));
         }
 
-        // Avoid replacing with identical URL (prevents loops)
         const next = `${pathname}?${qs.toString()}`;
         const current = `${pathname}?${searchParams.toString()}`;
         if (next !== current) {
             router.replace(next, { scroll: false });
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [quick, from, to, activeDomainId, pathname]); // (intentionally not depending on searchParams to avoid loops)
+    }, [quick, from, to, activeDomainId, pathname, searchParams, router]);
 
-    // ---------- 3) When quick changes, recompute dates ----------
+    // When quick changes, recompute dates
     useEffect(() => {
-        if (quick == null) return; // custom
+        if (quick == null) return;
         const end = new Date();
-        const start = new Date(); start.setUTCDate(start.getUTCDate() - (quick - 1));
+        const start = new Date();
+        start.setUTCDate(start.getUTCDate() - (quick - 1));
         setFrom(start.toISOString().slice(0, 10));
         setTo(end.toISOString().slice(0, 10));
     }, [quick]);
 
-    // ---------- 4) Fetch ----------
+    // Fetch data
     useEffect(() => {
         let aborted = false;
         (async () => {
             try {
-                setLoading(true); setError(null);
+                setLoading(true);
+                setError(null);
                 const url = `${backend}/companies/${hash}/reports/tlsrpt?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`;
                 const res = await fetch(url, { headers: authHeaders() });
                 if (!res.ok) throw new Error(`Failed: ${res.status}`);
@@ -197,7 +291,6 @@ export default function CompanyTlsRptPage() {
                 if (aborted) return;
                 setData(json);
 
-                // default domain if none selected from URL
                 setActiveDomainId(prev => {
                     if (prev != null) return prev;
                     return json.domains?.[0]?.id ?? null;
@@ -212,10 +305,15 @@ export default function CompanyTlsRptPage() {
         return () => { aborted = true; };
     }, [hash, from, to]);
 
-    // Manual date changes => custom mode
-    const onChangeFrom = (v: string) => { setFrom(v); setQuick(null); };
-    const onChangeTo   = (v: string) => { setTo(v); setQuick(null); };
-    const isCustom = quick == null;
+    function applyQuickRange(days: number) {
+        const now = new Date();
+        const toDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+        const fromDate = new Date(toDate);
+        fromDate.setUTCDate(toDate.getUTCDate() - (days - 1));
+        setFrom(fmtDateUTC(fromDate));
+        setTo(fmtDateUTC(toDate));
+        setQuick(days);
+    }
 
     const activeDomain = useMemo(
         () => (data && activeDomainId != null ? data.domains.find(d => d.id === activeDomainId) ?? null : null),
@@ -230,12 +328,17 @@ export default function CompanyTlsRptPage() {
     const agg = useMemo(() => aggregateTlsrpt(domainReports), [domainReports]);
 
     const byResultBars = useMemo(
-        () => Object.entries(agg.byResultType).sort((a, b) => b[1] - a[1]).map(([result, count]) => ({ result, count })),
+        () => Object.entries(agg.byResultType)
+            .sort((a, b) => b[1] - a[1])
+            .map(([result, count]) => ({ result, count })),
         [agg.byResultType]
     );
 
     const byMxBars = useMemo(
-        () => Object.entries(agg.byReceivingMx).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([mx, count]) => ({ mx, count })),
+        () => Object.entries(agg.byReceivingMx)
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([mx, count]) => ({ mx, count })),
         [agg.byReceivingMx]
     );
 
@@ -244,241 +347,467 @@ export default function CompanyTlsRptPage() {
         { name: "Failed TLS", value: agg.failure },
     ]), [agg.success, agg.failure]);
 
-    /* ============== Render ============== */
+    const successRate = agg.total > 0 ? ((agg.success / agg.total) * 100).toFixed(1) : '0';
 
+    /* ============== Loading State ============== */
     if (loading) {
         return (
-            <div className="max-w-7xl mx-auto p-6 space-y-6">
-                <div className="flex items-center justify-between">
-                    <Skeleton className="h-6 w-64" />
-                    <Skeleton className="h-5 w-40" />
+            <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+                <div className="max-w-7xl mx-auto p-6">
+                    <div className="animate-pulse space-y-6">
+                        <div className="h-12 w-64 rounded-lg bg-gray-200" />
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                            {[1, 2, 3, 4].map(i => (
+                                <div key={i} className="h-32 rounded-xl bg-gray-200" />
+                            ))}
+                        </div>
+                        <div className="h-96 rounded-xl bg-gray-200" />
+                    </div>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Skeleton className="h-28" />
-                    <Skeleton className="h-28" />
-                    <Skeleton className="h-28" />
-                </div>
-                <Skeleton className="h-80" />
-                <Skeleton className="h-80" />
             </div>
         );
     }
 
-    if (error || !data) {
+    /* ============== Error State ============== */
+    if (error) {
         return (
-            <div className="max-w-xl mx-auto p-6 text-center space-y-4">
-                <p className="text-red-700 bg-red-50 border border-red-200 p-3 rounded">{error || "Failed to load."}</p>
-                <button onClick={() => location.reload()} className="px-3 py-2 rounded bg-blue-600 text-white text-sm">Retry</button>
+            <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
+                <div className="rounded-xl bg-white p-8 shadow-lg max-w-md w-full">
+                    <div className="flex items-center gap-3 text-red-600 mb-2">
+                        <ExclamationTriangleIcon className="h-6 w-6" />
+                        <h2 className="text-lg font-semibold">Error Loading TLS-RPT Reports</h2>
+                    </div>
+                    <p className="text-gray-600">{error}</p>
+                    <button
+                        onClick={() => router.push(`/dashboard/company/${hash}`)}
+                        className="mt-4 w-full rounded-lg bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 transition-colors"
+                    >
+                        Back to Dashboard
+                    </button>
+                </div>
             </div>
         );
     }
 
+    if (!data) return null;
+
+    /* ============== Main Render ============== */
     return (
-        <div className="max-w-7xl mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                    <button onClick={() => router.push(`/dashboard/company/${data.company.hash}`)} className="text-gray-600 hover:text-gray-800">← Back</button>
-                    <h1 className="text-2xl font-semibold">TLS-RPT Reports</h1>
-                    <span className="text-sm text-gray-500">{data.company.name || "Company"}</span>
-                </div>
-                <Link href={`/dashboard/company/${data.company.hash}`} className="text-blue-700 hover:underline">
-                    Company Overview →
-                </Link>
-            </div>
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+            <div className="max-w-7xl mx-auto p-6 space-y-6">
+                {/* Header */}
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => router.push(`/dashboard/company/${hash}`)}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 transition-all hover:shadow"
+                        >
+                            <ArrowLeftIcon className="h-4 w-4" />
+                            Back to Dashboard
+                        </button>
+                        <div className="h-8 w-px bg-gray-200" />
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">TLS-RPT Reports</h1>
+                            <p className="text-sm text-gray-500">
+                                {data.company.name || "Company"} · {domainReports.length} reports
+                            </p>
+                        </div>
+                    </div>
 
-            {/* Sticky toolbar: date pickers + segmented quick ranges */}
-            <div className="sticky top-0 z-10 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/60 border rounded-lg p-3">
-                <div className="flex flex-wrap items-center gap-3">
-                    <div className="text-sm text-gray-600">Date range</div>
-                    <input
-                        type="date" value={from} onChange={(e) => onChangeFrom(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm"
-                        max={to}
-                    />
-                    <span className="text-gray-400">→</span>
-                    <input
-                        type="date" value={to} onChange={(e) => onChangeTo(e.target.value)}
-                        className="border rounded px-2 py-1 text-sm"
-                        min={from}
-                        max={todayYMD()}
-                    />
-
-                    <div className="ml-auto flex items-center gap-2">
-                        <span className="text-xs text-gray-500">Quick:</span>
-                        {QUICK_RANGES.map(n => (
-                            <SegButton
-                                key={n}
-                                active={!isCustom && quick === n}
-                                onClick={() => setQuick(n)}
-                                disabled={loading}
-                            >
-                                {n}d
-                            </SegButton>
-                        ))}
-                        <SegButton active={isCustom} onClick={() => setQuick(null)} disabled={loading}>Custom</SegButton>
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Success Rate:</span>
+                        <span className="text-2xl font-bold text-emerald-600">{successRate}%</span>
                     </div>
                 </div>
-            </div>
 
-            {/* Domain tabs */}
-            <div className="flex flex-wrap gap-2">
-                {data.domains.length === 0 ? (
-                    <span className="text-sm text-gray-500">No domains in this company.</span>
-                ) : (
-                    data.domains.map(d => {
-                        const active = activeDomainId === d.id;
-                        return (
-                            <button
-                                key={d.id}
-                                onClick={() => setActiveDomainId(d.id)}
-                                className={[
-                                    "px-3 py-1.5 rounded-full text-sm border transition",
-                                    active ? "bg-blue-600 text-white border-blue-600 shadow-sm"
-                                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50",
-                                ].join(" ")}
-                            >
-                                {d.name}
-                            </button>
-                        );
-                    })
-                )}
-            </div>
+                {/* Stats Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <StatCard
+                        label="Total Sessions"
+                        value={agg.total}
+                        icon={<InboxIcon className="h-5 w-5" />}
+                        color="blue"
+                    />
+                    <StatCard
+                        label="Successful TLS"
+                        value={agg.success}
+                        icon={<CheckCircleIcon className="h-5 w-5" />}
+                        color="emerald"
+                    />
+                    <StatCard
+                        label="Failed TLS"
+                        value={agg.failure}
+                        icon={<XCircleIcon className="h-5 w-5" />}
+                        color="red"
+                    />
+                    <StatCard
+                        label="Active Domains"
+                        value={data.domains.length}
+                        icon={<GlobeAltIcon className="h-5 w-5" />}
+                        color="amber"
+                    />
+                </div>
 
-            {/* Stat cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-600">Total Sessions (reported)</div>
-                    <div className="mt-1 text-2xl font-semibold">{fmt(agg.total)}</div>
-                    <div className="mt-1 text-xs text-gray-500">{activeDomain?.name ?? "domain"}</div>
-                </div>
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-600">Successful TLS</div>
-                    <div className="mt-1 text-2xl font-semibold">{fmt(agg.success)}</div>
-                    <div className="mt-1 text-xs text-gray-500">Opportunistic or enforced success</div>
-                </div>
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm text-gray-600">Failed TLS</div>
-                    <div className="mt-1 text-2xl font-semibold">{fmt(agg.failure)}</div>
-                    <div className="mt-1 text-xs text-gray-500">Handshake / policy / cert issues</div>
-                </div>
-            </div>
-
-            {/* Charts Row */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Result types */}
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="flex items-center justify-between">
-                        <div className="text-sm font-medium">Fail result types</div>
-                        <div className="text-xs text-gray-500">{activeDomain?.name ?? "domain"}</div>
+                {/* Date Range & Domain Filters */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-white">
+                                <FunnelIcon className="h-5 w-5" />
+                                <h3 className="text-sm font-semibold uppercase tracking-wider">Filters & Date Range</h3>
+                            </div>
+                            <div className="text-xs text-purple-100">
+                                {from} to {to}
+                            </div>
+                        </div>
                     </div>
-                    <div className="mt-2 h-80 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={byResultBars} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="result" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={50} />
-                                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={40} />
-                                <Tooltip formatter={(v: unknown) => [String(v), "failures"]} />
-                                <Legend wrapperStyle={{ fontSize: 12 }} />
-                                <Bar dataKey="count" name="Failures" radius={[6, 6, 0, 0]} />
+
+                    <div className="p-6 space-y-6">
+                        {/* Quick Actions */}
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-gray-700">Quick Ranges:</span>
+                            {QUICK_RANGES.map(({ label, days }) => (
+                                <button
+                                    key={days}
+                                    type="button"
+                                    onClick={() => applyQuickRange(days)}
+                                    className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                                        quick === days
+                                            ? 'bg-gray-900 text-white'
+                                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    <CalendarDaysIcon className="h-3.5 w-3.5" />
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Date Inputs */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <CalendarDaysIcon className="inline h-4 w-4 mr-1" />
+                                    Date From
+                                </label>
+                                <input
+                                    type="date"
+                                    value={from}
+                                    onChange={(e) => { setFrom(e.target.value); setQuick(null); }}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    max={to}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <CalendarDaysIcon className="inline h-4 w-4 mr-1" />
+                                    Date To
+                                </label>
+                                <input
+                                    type="date"
+                                    value={to}
+                                    onChange={(e) => { setTo(e.target.value); setQuick(null); }}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    min={from}
+                                    max={todayYMD()}
+                                />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    <GlobeAltIcon className="inline h-4 w-4 mr-1" />
+                                    Domain
+                                </label>
+                                <select
+                                    value={activeDomainId || ''}
+                                    onChange={(e) => setActiveDomainId(Number(e.target.value))}
+                                    className="w-full rounded-lg border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    {data.domains.map(d => (
+                                        <option key={d.id} value={d.id}>{d.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Success vs Failure Chart */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Pie Chart */}
+                    <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-white">
+                                    <ChartBarIcon className="h-5 w-5" />
+                                    <h3 className="text-sm font-semibold uppercase tracking-wider">
+                                        Success vs Failure
+                                    </h3>
+                                </div>
+                                <div className="text-xs text-indigo-100">
+                                    {activeDomain?.name}
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            <ResponsiveContainer width="100%" height={280}>
+                                <PieChart>
+                                    <Pie
+                                        data={pieData}
+                                        dataKey="value"
+                                        nameKey="name"
+                                        cx="50%"
+                                        cy="50%"
+                                        outerRadius={100}
+                                        label={(entry) => `${entry.name}: ${fmt(entry.value)}`}
+                                    >
+                                        {pieData.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip formatter={(value: unknown) => fmt(Number(value))} />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    {/* Failure Types Chart */}
+                    <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-red-500 to-red-600 px-6 py-4">
+                            <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 text-white">
+                                    <ExclamationTriangleIcon className="h-5 w-5" />
+                                    <h3 className="text-sm font-semibold uppercase tracking-wider">
+                                        Failure Result Types
+                                    </h3>
+                                </div>
+                                <div className="text-xs text-red-100">
+                                    {byResultBars.length} types
+                                </div>
+                            </div>
+                        </div>
+                        <div className="p-6">
+                            <ResponsiveContainer width="100%" height={280}>
+                                <BarChart data={byResultBars} margin={{ top: 10, right: 30, left: 0, bottom: 50 }}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                    <XAxis
+                                        dataKey="result"
+                                        tick={{ fontSize: 11, fill: '#6b7280' }}
+                                        angle={-45}
+                                        textAnchor="end"
+                                        height={80}
+                                    />
+                                    <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
+                                    <Tooltip
+                                        contentStyle={{
+                                            backgroundColor: '#fff',
+                                            border: '1px solid #e5e7eb',
+                                            borderRadius: '8px',
+                                            fontSize: '12px'
+                                        }}
+                                        formatter={(value: unknown) => [fmt(Number(value)), 'Failures']}
+                                    />
+                                    <Bar dataKey="count" fill="#ef4444" radius={[6, 6, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Top Receiving MX Failures */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-amber-500 to-amber-600 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-white">
+                                <ServerStackIcon className="h-5 w-5" />
+                                <h3 className="text-sm font-semibold uppercase tracking-wider">
+                                    Top Receiving MX (Failures)
+                                </h3>
+                            </div>
+                            <div className="text-xs text-amber-100">
+                                Top 10 servers
+                            </div>
+                        </div>
+                    </div>
+                    <div className="p-6">
+                        <ResponsiveContainer width="100%" height={320}>
+                            <BarChart data={byMxBars} margin={{ top: 10, right: 30, left: 0, bottom: 80 }}>
+                                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                                <XAxis
+                                    dataKey="mx"
+                                    tick={{ fontSize: 11, fill: '#6b7280' }}
+                                    angle={-45}
+                                    textAnchor="end"
+                                    height={100}
+                                />
+                                <YAxis tick={{ fontSize: 11, fill: '#6b7280' }} />
+                                <Tooltip
+                                    contentStyle={{
+                                        backgroundColor: '#fff',
+                                        border: '1px solid #e5e7eb',
+                                        borderRadius: '8px',
+                                        fontSize: '12px'
+                                    }}
+                                    formatter={(value: unknown) => [fmt(Number(value)), 'Failures']}
+                                />
+                                <Bar dataKey="count" fill="#f59e0b" radius={[6, 6, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
                 </div>
 
-                {/* Success vs Fail pie */}
-                <div className="rounded-xl border bg-white p-4">
-                    <div className="text-sm font-medium">Success vs Fail</div>
-                    <div className="mt-2 h-80 w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
-                                <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={110} label>
-                                    {pieData.map((_, i) => <Cell key={i} />)}
-                                </Pie>
-                                <Tooltip formatter={(v: unknown, n: unknown) => [String(v), String(n)]} />
-                                <Legend wrapperStyle={{ fontSize: 12 }} />
-                            </PieChart>
-                        </ResponsiveContainer>
+                {/* Top Failure Details */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-gray-700 to-gray-800 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-white">
+                                <DocumentChartBarIcon className="h-5 w-5" />
+                                <h3 className="text-sm font-semibold uppercase tracking-wider">
+                                    Top Failure Details
+                                </h3>
+                            </div>
+                            <div className="text-xs text-gray-300">
+                                {agg.topFailures.length} instances
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            {/* Top MX Failures */}
-            <div className="rounded-xl border bg-white p-4">
-                <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium">Top receiving MX (failures)</div>
-                    <div className="text-xs text-gray-500">{activeDomain?.name ?? "domain"}</div>
-                </div>
-                <div className="mt-2 h-80 w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={byMxBars} margin={{ top: 8, right: 16, left: 0, bottom: 8 }}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="mx" tick={{ fontSize: 11 }} interval={0} angle={-15} textAnchor="end" height={50} />
-                            <YAxis allowDecimals={false} tick={{ fontSize: 11 }} width={40} />
-                            <Tooltip formatter={(v: unknown) => [String(v), "failures"]} />
-                            <Legend wrapperStyle={{ fontSize: 12 }} />
-                            <Bar dataKey="count" name="Failures" radius={[6, 6, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
-                </div>
-            </div>
-
-            {/* Top failure list (compact) */}
-            <div className="rounded-xl border bg-white p-4">
-                <div className="text-sm font-medium mb-2">Top failure instances</div>
-                {agg.topFailures.length === 0 ? (
-                    <p className="text-sm text-gray-500">No failure details reported for this range.</p>
-                ) : (
-                    <ul className="divide-y">
-                        {agg.topFailures.map((f, i) => (
-                            <li key={`${f.mx}-${i}`} className="py-2 flex items-center justify-between">
-                                <div className="min-w-0">
-                                    <div className="font-medium text-gray-900 truncate">{f.mx}</div>
-                                    <div className="text-xs text-gray-500 truncate">{f.reason ?? "—"}</div>
-                                </div>
-                                <div className="text-sm font-semibold">{fmt(f.count)}</div>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </div>
-
-            {/* Raw reports table */}
-            <div className="rounded-xl border bg-white p-4">
-                <div className="flex items-center justify-between">
-                    <div className="text-sm font-medium">Raw report windows ({activeDomain?.name || "domain"})</div>
-                    <div className="text-xs text-gray-500">From {data.range.from} to {data.range.to}</div>
-                </div>
-                {domainReports.length === 0 ? (
-                    <p className="mt-3 text-sm text-gray-500">No TLS-RPT reports for this range.</p>
-                ) : (
-                    <div className="mt-3 overflow-x-auto">
-                        <table className="min-w-full text-sm">
-                            <thead>
-                            <tr className="text-left text-gray-600 border-b">
-                                <th className="py-2 pr-4">Reporter</th>
-                                <th className="py-2 pr-4">Window</th>
-                                <th className="py-2 pr-4">Success</th>
-                                <th className="py-2 pr-4">Failure</th>
-                                <th className="py-2 pr-4">Received</th>
-                                <th className="py-2 pr-4">Report ID</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {domainReports.map((r) => (
-                                <tr key={r.id} className="border-b last:border-0">
-                                    <td className="py-2 pr-4">{r.org || "—"}</td>
-                                    <td className="py-2 pr-4">{toDateLabel(r.window.start)} → {toDateLabel(r.window.end)}</td>
-                                    <td className="py-2 pr-4">{fmt(r.summary?.success)}</td>
-                                    <td className="py-2 pr-4">{fmt(r.summary?.failure)}</td>
-                                    <td className="py-2 pr-4">{toDateLabel(r.receivedAt)}</td>
-                                    <td className="py-2 pr-4 font-mono text-[11px] text-gray-500">{r.reportId ?? "—"}</td>
+                    <div className="overflow-x-auto">
+                        {agg.topFailures.length === 0 ? (
+                            <div className="p-12 text-center">
+                                <ShieldCheckIcon className="mx-auto h-12 w-12 text-gray-400" />
+                                <h3 className="mt-2 text-lg font-semibold text-gray-900">No failures found</h3>
+                                <p className="mt-1 text-sm text-gray-500">
+                                    Great! No TLS failures reported for this period.
+                                </p>
+                            </div>
+                        ) : (
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                        Receiving MX
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                        Failure Reason
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                        Count
+                                    </th>
                                 </tr>
-                            ))}
-                            </tbody>
-                        </table>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                {agg.topFailures.map((f, i) => (
+                                    <tr key={`${f.mx}-${i}`} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm font-medium text-gray-900">{f.mx}</div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="text-sm text-gray-500">
+                                                {f.reason || <span className="text-gray-400 italic">No reason specified</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                    {fmt(f.count)}
+                                                </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                                </tbody>
+                            </table>
+                        )}
                     </div>
-                )}
+                </div>
+
+                {/* Raw Reports Table */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-blue-500 to-blue-600 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-white">
+                                <ClockIcon className="h-5 w-5" />
+                                <h3 className="text-sm font-semibold uppercase tracking-wider">
+                                    Raw Report Windows
+                                </h3>
+                            </div>
+                            <div className="text-xs text-blue-100">
+                                {domainReports.length} reports for {activeDomain?.name}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        {domainReports.length === 0 ? (
+                            <div className="p-12 text-center">
+                                <InboxIcon className="mx-auto h-12 w-12 text-gray-400" />
+                                <h3 className="mt-2 text-lg font-semibold text-gray-900">No reports found</h3>
+                                <p className="mt-1 text-sm text-gray-500">
+                                    Try adjusting your date range or domain selection
+                                </p>
+                            </div>
+                        ) : (
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                        Reporter
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                        Report Window
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                        Success
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                        Failed
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                        Received
+                                    </th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                        Report ID
+                                    </th>
+                                </tr>
+                                </thead>
+                                <tbody className="bg-white divide-y divide-gray-200">
+                                {domainReports.map((r) => (
+                                    <tr key={r.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm font-medium text-gray-900">
+                                                {r.org || <span className="text-gray-400 italic">Unknown</span>}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                            <div className="text-sm text-gray-500">
+                                                {toDateLabel(r.window.start)} → {toDateLabel(r.window.end)}
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">
+                                                    {fmt(r.summary?.success)}
+                                                </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                    {fmt(r.summary?.failure)}
+                                                </span>
+                                        </td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                            {toDateLabel(r.receivedAt, 'full')}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <code className="text-xs text-gray-500 font-mono">
+                                                {r.reportId ? r.reportId.slice(0, 12) + '...' : '—'}
+                                            </code>
+                                        </td>
+                                    </tr>
+                                ))}
+                                </tbody>
+                            </table>
+                        )}
+                    </div>
+                </div>
             </div>
         </div>
     );
