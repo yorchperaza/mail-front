@@ -3,7 +3,25 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeftIcon, PlayCircleIcon, ClipboardDocumentIcon } from '@heroicons/react/24/outline';
+import {
+    ArrowLeftIcon,
+    PlayCircleIcon,
+    ClipboardDocumentIcon,
+    UsersIcon,
+    FunnelIcon,
+    CalendarDaysIcon,
+    HashtagIcon,
+    CheckCircleIcon,
+    ExclamationTriangleIcon,
+    EnvelopeIcon,
+    UserIcon,
+    CheckIcon,
+    XMarkIcon,
+} from '@heroicons/react/24/outline';
+import {
+    CheckCircleIcon as CheckCircleSolid,
+    ExclamationTriangleIcon as ExclamationTriangleSolid
+} from '@heroicons/react/24/solid';
 
 /* ---------- Types ---------- */
 type Definition = {
@@ -20,7 +38,7 @@ type Segment = {
     definition: Definition | null;
     materialized_count: number | null;
     last_built_at: string | null;
-    hash?: string | null; // 👈 include hash
+    hash?: string | null;
 };
 
 type ApiPaged<T> = {
@@ -31,6 +49,15 @@ type ApiPaged<T> = {
 type PreviewRow = { id: number; email: string | null; name: string | null; status: string | null };
 
 type ListSummary = { id: number; name: string };
+
+type IconComponent = React.ComponentType<React.SVGProps<SVGSVGElement>>;
+type ChipColor = 'green' | 'blue' | 'emerald' | 'red' | 'indigo' | 'purple';
+
+type Chip = {
+    icon: IconComponent;
+    label: string;
+    color: ChipColor;
+};
 
 /* ---------- Page ---------- */
 export default function SegmentPreviewPage() {
@@ -179,7 +206,7 @@ export default function SegmentPreviewPage() {
             // refresh segment header (count + last_built_at)
             setSegment(payload.segment as Segment);
             setBuildMsg(
-                `Built: ${payload?.performed?.new_count ?? '—'} matches (Δ ${payload?.performed?.delta ?? '—'}).`
+                `Built successfully: ${payload?.performed?.new_count ?? '—'} matches (change: ${payload?.performed?.delta ?? '—'})`
             );
         } catch (e) {
             setBuildErr(e instanceof Error ? e.message : String(e));
@@ -207,10 +234,21 @@ export default function SegmentPreviewPage() {
         }
     }
 
+
     /* ---------- Helpers ---------- */
     const toLocale = (s?: string | null) => {
         if (!s) return '—';
-        try { return new Date(s).toLocaleString(); } catch { return s; }
+        try {
+            return new Date(s).toLocaleString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        } catch {
+            return s;
+        }
     };
 
     function updateQuery(partial: Record<string, unknown>) {
@@ -224,172 +262,428 @@ export default function SegmentPreviewPage() {
 
     function ruleChips(def?: Definition | null) {
         if (!def || Object.keys(def).length === 0) {
-            return <span className="inline-block text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-600">No filters</span>;
+            return (
+                <div className="inline-flex items-center gap-2 rounded-lg bg-gray-100 px-3 py-1.5 text-xs text-gray-600">
+                    <XMarkIcon className="h-3.5 w-3.5" />
+                    No filters applied
+                </div>
+            );
         }
-        const chips: string[] = [];
-        if (def.status) chips.push(`Status: ${def.status}`);
-        if (def.email_contains) chips.push(`Email contains “${def.email_contains}”`);
-        if ('gdpr_consent' in def) chips.push(def.gdpr_consent ? 'Has GDPR consent' : 'No GDPR consent');
-        if (def.in_list_ids?.length) chips.push('In any of: ' + def.in_list_ids.map(listName).join(', '));
-        if (def.not_in_list_ids?.length) chips.push('Not in: ' + def.not_in_list_ids.map(listName).join(', '));
+
+        const chips: Chip[] = [];
+
+        const colorClasses: Record<ChipColor, string> = {
+            green: 'bg-green-50 text-green-700 border-green-200',
+            blue: 'bg-blue-50 text-blue-700 border-blue-200',
+            emerald: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+            red: 'bg-red-50 text-red-700 border-red-200',
+            indigo: 'bg-indigo-50 text-indigo-700 border-indigo-200',
+            purple: 'bg-purple-50 text-purple-700 border-purple-200',
+        };
+
+        if (def.status) {
+            chips.push({
+                icon: CheckCircleIcon,
+                label: `Status: ${def.status}`,
+                color: 'green'
+            });
+        }
+        if (def.email_contains) {
+            chips.push({
+                icon: EnvelopeIcon,
+                label: `Email contains "${def.email_contains}"`,
+                color: 'blue'
+            });
+        }
+        if ('gdpr_consent' in def) {
+            chips.push({
+                icon: def.gdpr_consent ? CheckIcon : XMarkIcon,
+                label: def.gdpr_consent ? 'Has GDPR consent' : 'No GDPR consent',
+                color: def.gdpr_consent ? 'emerald' : 'red'
+            });
+        }
+        if (def.in_list_ids?.length) {
+            chips.push({
+                icon: UsersIcon,
+                label: 'In lists: ' + def.in_list_ids.map(listName).join(', '),
+                color: 'indigo'
+            });
+        }
+        if (def.not_in_list_ids?.length) {
+            chips.push({
+                icon: UsersIcon,
+                label: 'Not in lists: ' + def.not_in_list_ids.map(listName).join(', '),
+                color: 'purple'
+            });
+        }
+
         return (
             <div className="flex flex-wrap gap-2">
-                {chips.map((c, i) => (
-                    <span key={i} className="inline-block text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
-            {c}
-          </span>
-                ))}
+                {chips.map((chip, i) => {
+                    const Icon = chip.icon;
+                    return (
+                        <span key={i} className={`inline-flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg border ${colorClasses[chip.color as keyof typeof colorClasses]}`}>
+                            <Icon className="h-3.5 w-3.5" />
+                            {chip.label}
+                        </span>
+                    );
+                })}
             </div>
         );
     }
 
-    /* ---------- Render ---------- */
-    if (segLoading && !segment) return <p className="p-6 text-center text-gray-600">Loading segment…</p>;
+    /* ---------- Loading State ---------- */
+    if (segLoading && !segment) {
+        return (
+            <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+                <div className="max-w-6xl mx-auto p-6">
+                    <div className="animate-pulse space-y-6">
+                        <div className="h-12 w-64 rounded-lg bg-gray-200" />
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {[1, 2, 3].map(i => (
+                                <div key={i} className="h-32 rounded-xl bg-gray-200" />
+                            ))}
+                        </div>
+                        <div className="h-96 rounded-xl bg-gray-200" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    /* ---------- Error State ---------- */
     if (segErr) {
         return (
-            <div className="p-6 text-center">
-                <p className="text-red-600">{segErr}</p>
-                <Link href={backHref} className="mt-3 inline-flex items-center px-3 py-2 rounded border">
-                    <ArrowLeftIcon className="h-4 w-4 mr-1" /> Back
-                </Link>
+            <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50 flex items-center justify-center">
+                <div className="rounded-xl bg-white p-8 shadow-lg max-w-md w-full">
+                    <div className="flex items-center gap-3 text-red-600 mb-2">
+                        <ExclamationTriangleIcon className="h-6 w-6" />
+                        <h2 className="text-lg font-semibold">Error Loading Segment</h2>
+                    </div>
+                    <p className="text-gray-600">{segErr}</p>
+                    <Link
+                        href={backHref}
+                        className="mt-4 w-full inline-flex items-center justify-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-white hover:bg-gray-800 transition-colors"
+                    >
+                        <ArrowLeftIcon className="h-4 w-4" />
+                        Back to Segments
+                    </Link>
+                </div>
             </div>
         );
     }
+
     if (!segment) return null;
 
+    /* ---------- Main Render ---------- */
     return (
-        <div className="max-w-6xl mx-auto p-6 space-y-6">
-            {/* Header */}
-            <div className="flex items-center justify-between gap-3">
-                <button onClick={() => router.push(backHref)} className="inline-flex items-center text-gray-600 hover:text-gray-800">
-                    <ArrowLeftIcon className="h-5 w-5 mr-1" /> Back
-                </button>
-
-                <div className="min-w-0">
-                    <h1 className="text-2xl font-semibold truncate">{segment.name}</h1>
-                    <div className="mt-1 text-sm text-gray-600 flex flex-wrap items-center gap-3">
-            <span>
-              Count: <span className="font-medium">{segment.materialized_count ?? '—'}</span>
-                {' '}· Last built: {toLocale(segment.last_built_at)}
-            </span>
-                        {/* Hash display */}
-                        {segment.hash ? (
-                            <span className="inline-flex items-center gap-2">
-                <code className="text-xs bg-gray-100 px-2 py-0.5 rounded border">
-                  {maskHash(segment.hash)}
-                </code>
-                <button
-                    onClick={() => copyHash(segment.hash)}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded border hover:bg-gray-50 text-xs"
-                    title="Copy full hash"
-                >
-                  <ClipboardDocumentIcon className="h-4 w-4" />
-                    {copied ? 'Copied' : 'Copy'}
-                </button>
-              </span>
-                        ) : null}
-                    </div>
-                </div>
-
-                <button
-                    onClick={handleBuildNow}
-                    disabled={building}
-                    className="inline-flex items-center px-4 py-2 rounded border hover:bg-gray-50 disabled:opacity-60"
-                    title="Build (materialize count)"
-                >
-                    <PlayCircleIcon className="h-5 w-5 mr-1" />
-                    {building ? 'Building…' : 'Build now'}
-                </button>
-            </div>
-
-            {/* Rules */}
-            <div className="bg-white border rounded-lg p-4">
+        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+            <div className="max-w-6xl mx-auto p-6 space-y-6">
+                {/* Header */}
                 <div className="flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">Rules</h2>
-                    {listsErr && <span className="text-sm text-red-600">{listsErr}</span>}
-                </div>
-                <div className="mt-2">{ruleChips(segment.definition)}</div>
-                {buildErr && <div className="mt-2 text-sm text-red-600">{buildErr}</div>}
-                {buildMsg && <div className="mt-2 text-sm text-green-700">{buildMsg}</div>}
-            </div>
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => router.push(backHref)}
+                            className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 transition-all hover:shadow"
+                        >
+                            <ArrowLeftIcon className="h-4 w-4" />
+                            Back to Segments
+                        </button>
+                        <div className="h-8 w-px bg-gray-200" />
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-900">{segment.name}</h1>
+                            <p className="text-sm text-gray-500">
+                                Segment #{segmentId}
+                            </p>
+                        </div>
+                    </div>
 
-            {/* Preview table */}
-            <div className="bg-white border rounded-lg">
-                <div className="p-3 border-b flex items-center justify-between">
-                    <h2 className="text-lg font-semibold">Matching contacts</h2>
-                    <div className="text-sm text-gray-600">
-                        {preview?.meta
-                            ? <>Page <span className="font-medium">{preview.meta.page}</span> / {preview.meta.totalPages} · {preview.meta.total} total</>
-                            : prevLoading ? 'Loading…' : ''}
+                    <button
+                        onClick={handleBuildNow}
+                        disabled={building}
+                        className="inline-flex items-center gap-2 rounded-lg bg-gradient-to-r from-indigo-500 to-indigo-600 px-4 py-2 text-sm font-medium text-white hover:from-indigo-600 hover:to-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm"
+                    >
+                        {building ? (
+                            <>
+                                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Building...
+                            </>
+                        ) : (
+                            <>
+                                <PlayCircleIcon className="h-4 w-4" />
+                                Build Now
+                            </>
+                        )}
+                    </button>
+                </div>
+
+                {/* Stats Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-blue-500 to-blue-600 p-3">
+                            <div className="flex items-center justify-between text-white">
+                                <UsersIcon className="h-5 w-5" />
+                                <span className="text-xs font-medium uppercase tracking-wider opacity-90">Total Matches</span>
+                            </div>
+                        </div>
+                        <div className="p-4">
+                            <div className="text-2xl font-bold text-gray-900">
+                                {segment.materialized_count?.toLocaleString() ?? '—'}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">Contacts in segment</div>
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-emerald-500 to-emerald-600 p-3">
+                            <div className="flex items-center justify-between text-white">
+                                <CalendarDaysIcon className="h-5 w-5" />
+                                <span className="text-xs font-medium uppercase tracking-wider opacity-90">Last Built</span>
+                            </div>
+                        </div>
+                        <div className="p-4">
+                            <div className="text-sm font-semibold text-gray-900">
+                                {segment.last_built_at ? toLocale(segment.last_built_at) : 'Never'}
+                            </div>
+                            <div className="text-xs text-gray-500 mt-1">Last updated</div>
+                        </div>
+                    </div>
+
+                    <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                        <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-3">
+                            <div className="flex items-center justify-between text-white">
+                                <HashtagIcon className="h-5 w-5" />
+                                <span className="text-xs font-medium uppercase tracking-wider opacity-90">Segment Hash</span>
+                            </div>
+                        </div>
+                        <div className="p-4">
+                            <div className="flex items-center gap-2">
+                                <code className="text-xs font-mono bg-gray-100 px-2 py-1 rounded">
+                                    {maskHash(segment.hash)}
+                                </code>
+                                {segment.hash && (
+                                    <button
+                                        onClick={() => copyHash(segment.hash)}
+                                        className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium transition-all ${
+                                            copied
+                                                ? 'bg-emerald-500 text-white'
+                                                : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        }`}
+                                    >
+                                        {copied ? (
+                                            <>
+                                                <CheckIcon className="h-3 w-3" />
+                                                Copied
+                                            </>
+                                        ) : (
+                                            <>
+                                                <ClipboardDocumentIcon className="h-3 w-3" />
+                                                Copy
+                                            </>
+                                        )}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                {prevErr ? (
-                    <div className="p-4 text-red-600">{prevErr}</div>
-                ) : (
-                    <div className="overflow-auto">
-                        <table className="min-w-full text-sm">
-                            <thead className="bg-gray-50">
-                            <tr className="text-left">
-                                <th className="px-3 py-2">Name</th>
-                                <th className="px-3 py-2">Email</th>
-                                <th className="px-3 py-2">Status</th>
-                            </tr>
-                            </thead>
-                            <tbody>
-                            {prevLoading && !preview ? (
-                                <tr><td className="px-3 py-6 text-center text-gray-500" colSpan={3}>Loading…</td></tr>
-                            ) : !preview || preview.items.length === 0 ? (
-                                <tr><td className="px-3 py-6 text-center text-gray-500" colSpan={3}>No matching contacts.</td></tr>
-                            ) : (
-                                preview.items.map((c) => (
-                                    <tr key={c.id} className="border-t">
-                                        <td className="px-3 py-2">{c.name || <span className="text-gray-500 italic">(no name)</span>}</td>
-                                        <td className="px-3 py-2"><span className="font-mono text-xs">{c.email ?? '—'}</span></td>
-                                        <td className="px-3 py-2">{c.status ?? '—'}</td>
-                                    </tr>
-                                ))
-                            )}
-                            </tbody>
-                        </table>
+                {/* Build Messages */}
+                {buildErr && (
+                    <div className="rounded-xl bg-red-50 border border-red-200 p-4">
+                        <div className="flex gap-3">
+                            <ExclamationTriangleSolid className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                                <h3 className="text-sm font-semibold text-red-900">Build Failed</h3>
+                                <p className="mt-1 text-sm text-red-700">{buildErr}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                {buildMsg && (
+                    <div className="rounded-xl bg-emerald-50 border border-emerald-200 p-4">
+                        <div className="flex gap-3">
+                            <CheckCircleSolid className="h-5 w-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+                            <div>
+                                <h3 className="text-sm font-semibold text-emerald-900">Build Successful</h3>
+                                <p className="mt-1 text-sm text-emerald-700">{buildMsg}</p>
+                            </div>
+                        </div>
                     </div>
                 )}
 
-                {/* Pagination */}
-                <div className="p-3 border-t flex items-center justify-between">
-                    <div className="text-sm text-gray-600">
-                        Per page:{' '}
-                        <select
-                            value={perPage}
-                            onChange={(e) => updateQuery({ perPage: e.target.value, page: 1 })}
-                            className="rounded border border-gray-300 px-2 py-1.5 text-sm"
-                        >
-                            {[10, 25, 50, 100, 200].map(n => <option key={n} value={n}>{n}</option>)}
-                        </select>
+                {/* Rules Section */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-indigo-500 to-indigo-600 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-white">
+                                <FunnelIcon className="h-5 w-5" />
+                                <h3 className="text-sm font-semibold uppercase tracking-wider">Segment Rules</h3>
+                            </div>
+                            {listsErr && (
+                                <span className="text-xs text-red-200 bg-red-900/20 px-2 py-1 rounded">
+                                    {listsErr}
+                                </span>
+                            )}
+                        </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                        <button
-                            onClick={() => updateQuery({ page: Math.max(1, page - 1) })}
-                            disabled={!preview || page <= 1}
-                            className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 hover:bg-gray-50 text-sm"
-                        >
-                            Previous
-                        </button>
-                        <button
-                            onClick={() => updateQuery({ page: Math.min(preview?.meta?.totalPages ?? page, page + 1) })}
-                            disabled={!preview || page >= (preview.meta?.totalPages ?? 1)}
-                            className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50 hover:bg-gray-50 text-sm"
-                        >
-                            Next
-                        </button>
+                    <div className="p-6">
+                        {ruleChips(segment.definition)}
                     </div>
                 </div>
-            </div>
 
-            {/* Footer */}
-            <div className="flex items-center justify-between">
-                <Link href={backHref} className="text-sm text-gray-600 hover:text-gray-800">← Back to segments</Link>
-                <div />
+                {/* Contacts Table */}
+                <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
+                    <div className="bg-gradient-to-r from-purple-500 to-purple-600 px-6 py-4">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2 text-white">
+                                <UsersIcon className="h-5 w-5" />
+                                <h3 className="text-sm font-semibold uppercase tracking-wider">Matching Contacts</h3>
+                            </div>
+                            <div className="text-xs text-purple-100">
+                                {preview?.meta ? (
+                                    <>
+                                        Page {preview.meta.page} of {preview.meta.totalPages} • {preview.meta.total.toLocaleString()} total
+                                    </>
+                                ) : prevLoading ? (
+                                    'Loading...'
+                                ) : (
+                                    ''
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {prevErr ? (
+                        <div className="p-6">
+                            <div className="flex items-center gap-2 text-red-600">
+                                <ExclamationTriangleIcon className="h-5 w-5" />
+                                <p>{prevErr}</p>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                            <div className="flex items-center gap-1">
+                                                <UserIcon className="h-3.5 w-3.5" />
+                                                Name
+                                            </div>
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                            <div className="flex items-center gap-1">
+                                                <EnvelopeIcon className="h-3.5 w-3.5" />
+                                                Email
+                                            </div>
+                                        </th>
+                                        <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                                            <div className="flex items-center gap-1">
+                                                <CheckCircleIcon className="h-3.5 w-3.5" />
+                                                Status
+                                            </div>
+                                        </th>
+                                    </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                    {prevLoading && !preview ? (
+                                        <tr>
+                                            <td className="px-6 py-12 text-center text-gray-500" colSpan={3}>
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <svg className="animate-spin h-5 w-5 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                    Loading contacts...
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : !preview || preview.items.length === 0 ? (
+                                        <tr>
+                                            <td className="px-6 py-12 text-center text-gray-500" colSpan={3}>
+                                                <UsersIcon className="mx-auto h-8 w-8 text-gray-300 mb-2" />
+                                                <p className="text-sm">No matching contacts found</p>
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        preview.items.map((contact) => (
+                                            <tr key={contact.id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="text-sm font-medium text-gray-900">
+                                                        {contact.name || <span className="text-gray-400 italic">No name</span>}
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                        <span className="inline-flex items-center gap-1 font-mono text-xs bg-gray-100 px-2 py-1 rounded">
+                                                            <EnvelopeIcon className="h-3 w-3 text-gray-400" />
+                                                            {contact.email ?? '—'}
+                                                        </span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                        <span className={`inline-flex items-center rounded-full px-2 py-1 text-xs font-medium ${
+                                                            contact.status === 'active'
+                                                                ? 'bg-green-50 text-green-700 ring-1 ring-green-200'
+                                                                : 'bg-gray-50 text-gray-700 ring-1 ring-gray-200'
+                                                        }`}>
+                                                            {contact.status ?? '—'}
+                                                        </span>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Pagination */}
+                            <div className="bg-gray-50 px-6 py-4 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <label className="text-sm text-gray-700">Per page:</label>
+                                    <select
+                                        value={perPage}
+                                        onChange={(e) => updateQuery({ perPage: e.target.value, page: 1 })}
+                                        className="rounded-lg border-gray-300 shadow-sm text-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                    >
+                                        {[10, 25, 50, 100, 200].map(n => (
+                                            <option key={n} value={n}>{n}</option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => updateQuery({ page: Math.max(1, page - 1) })}
+                                        disabled={!preview || page <= 1}
+                                        className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                    >
+                                        <ArrowLeftIcon className="h-4 w-4" />
+                                        Previous
+                                    </button>
+
+                                    <div className="flex items-center gap-1">
+                                        <span className="text-sm text-gray-700">
+                                            Page {page} of {preview?.meta?.totalPages ?? 1}
+                                        </span>
+                                    </div>
+
+                                    <button
+                                        onClick={() => updateQuery({ page: Math.min(preview?.meta?.totalPages ?? page, page + 1) })}
+                                        disabled={!preview || page >= (preview.meta?.totalPages ?? 1)}
+                                        className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                    >
+                                        Next
+                                        <ArrowLeftIcon className="h-4 w-4 rotate-180" />
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                </div>
             </div>
         </div>
     );
