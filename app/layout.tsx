@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type {Metadata, Viewport} from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -31,6 +31,7 @@ export const metadata: Metadata = {
     applicationName: "MonkeysMail",
     authors: [{ name: "MonkeysCloud" }],
     metadataBase: new URL("https://smtp.monkeysmail.com"),
+
     openGraph: {
         title: "MonkeysMail — Email delivery, tracking & automation",
         description:
@@ -48,6 +49,7 @@ export const metadata: Metadata = {
         type: "website",
         locale: "en_US",
     },
+
     twitter: {
         card: "summary_large_image",
         title: "MonkeysMail — Email delivery, tracking & automation",
@@ -55,11 +57,18 @@ export const metadata: Metadata = {
             "Developer-friendly email platform: SMTP & REST API, events, segments, and real-time analytics.",
         images: ["/og/monkeysmail-og.png"],
     },
-    themeColor: "#111827",
+
     icons: {
         icon: "/favicon.ico",
         apple: "/apple-touch-icon.png",
     },
+};
+
+export const viewport: Viewport = {
+    themeColor: [
+        { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+        { media: "(prefers-color-scheme: dark)", color: "#111827" },
+    ],
 };
 
 export default function RootLayout({
