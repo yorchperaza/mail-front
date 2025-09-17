@@ -891,8 +891,7 @@ const sendEmail = async () => {
                     <div className="grid md:grid-cols-4 gap-8">
                         <div>
                             <div className="flex items-center gap-2 mb-4">
-                                <span className="text-2xl">🐵</span>
-                                <span className="font-bold text-white">MonkeysMail</span>
+                                <Image src="/logo.svg" alt="MonkeysLegion" width={160} height={38} className="rounded-xl" />
                             </div>
                             <p className="text-sm">
                                 Email infrastructure that scales with your business.
