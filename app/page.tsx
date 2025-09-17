@@ -17,7 +17,7 @@ import {
     ServerStackIcon,
     ArrowPathIcon,
     SparklesIcon,
-    RocketLaunchIcon,
+    RocketLaunchIcon, BoltIcon, ShieldCheckIcon,
 } from '@heroicons/react/24/outline';
 
 /* ========================= Types (match backend) ========================= */
@@ -337,7 +337,7 @@ export default function MonkeysMailLanding() {
                             </div>
                             <div className="hidden md:block h-6 w-px bg-blue-300" />
                             <span className="hidden md:inline-block text-sm text-blue-700">
-                                Email Infrastructure for Modern Teams
+                               The Email API for Developers
                             </span>
                         </div>
                         <nav className="hidden md:flex items-center gap-2">
@@ -407,31 +407,31 @@ export default function MonkeysMailLanding() {
                             <div className="mt-8 flex flex-wrap gap-3">
                                 <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-4 py-2 text-sm backdrop-blur-sm">
                                     <span className="text-blue-600">✓</span>
-                                    <span>Lightning Fast API</span>
+                                    <span>Developer-First Email API</span>
                                 </div>
                                 <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/80 px-4 py-2 text-sm backdrop-blur-sm">
                                     <span className="text-sky-600">✓</span>
-                                    <span>99.99% Uptime</span>
+                                    <span>99.99% Uptime SLA</span>
                                 </div>
                                 <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/80 px-4 py-2 text-sm backdrop-blur-sm">
                                     <span className="text-cyan-600">✓</span>
-                                    <span>Real-time Analytics</span>
+                                    <span>Webhooks & Real-Time Analytics</span>
                                 </div>
                             </div>
 
                             {/* Trust indicators */}
-                            <div className="mt-10 flex items-center gap-6 text-sm text-slate-500">
-                                <div className="flex items-center gap-1">
-                                    <span>⭐⭐⭐⭐⭐</span>
-                                    <span>4.9/5 rating</span>
+                            <div className="mt-10 flex items-center gap-6 text-sm text-slate-600">
+                                <div className="flex items-center gap-2">
+                                    <ShieldCheckIcon className="h-4 w-4 text-emerald-600" />
+                                    <span>DKIM, SPF & DMARC ready</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <span>🔒</span>
-                                    <span>256-bit encryption</span>
+                                    <ServerStackIcon className="h-4 w-4 text-blue-600" />
+                                    <span>SMTP & REST API</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <span>🚀</span>
-                                    <span>Sub-100ms API</span>
+                                    <BoltIcon className="h-4 w-4 text-sky-600" />
+                                    <span>Sub-100ms API latency</span>
                                 </div>
                             </div>
                         </div>
