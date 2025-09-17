@@ -152,6 +152,7 @@ export default function MonkeysMailLanding() {
     const [error, setError] = useState<string | null>(null);
     const [showPassword, setShowPassword] = useState(false);
     const [marketingOptIn, setMarketingOptIn] = useState(true);
+    const defaultPickDone = useRef(false);
 
     // Password score
     const passScore = useMemo(() => {
@@ -191,7 +192,11 @@ export default function MonkeysMailLanding() {
                 const items = (await res.json()) as PlanBrief[];
                 if (cancelled) return;
                 setBrief(items);
-                if (items.length > 1) setSelectedPlanId(items[2].id); else if (items.length > 0) setSelectedPlanId(items[0].id);
+                if (!defaultPickDone.current) {
+                    const preferredId = items[2]?.id ?? items[1]?.id ?? items[0]?.id ?? null;
+                    if (preferredId != null) setSelectedPlanId(preferredId);
+                    defaultPickDone.current = true;
+                }
 
                 const pairs = await Promise.all(
                     items.map(async (p) => {
@@ -484,29 +489,37 @@ export default function MonkeysMailLanding() {
                                                 </div>
                                             ) : (
                                                 brief.map((plan) => {
-                                                    const d = details[plan.id];
+                                                    const d = details[plan.id]; // may be undefined on first render
                                                     const isSelected = selectedPlanId === plan.id;
+
+                                                    // Stable "most popular": prefer 3rd, else 2nd, else 1st
                                                     const mostPopularId = brief[2]?.id ?? brief[1]?.id ?? brief[0]?.id ?? -1;
                                                     const isPopular = plan.id === mostPopularId;
-                                                    const disabled = d?.monthlyPrice === null;
+
+                                                    // Disable if details not loaded yet OR plan is custom (monthlyPrice === null)
+                                                    const disabled = !d || d.monthlyPrice === null;
 
                                                     return (
                                                         <button
                                                             key={plan.id}
                                                             type="button"
-                                                            onClick={() => !disabled && setSelectedPlanId(plan.id)}
+                                                            onClick={() => {
+                                                                if (!disabled) setSelectedPlanId(plan.id);
+                                                            }}
                                                             disabled={disabled}
-                                                            className={`relative w-full text-left rounded-xl border-2 p-4 transition-all transform hover:scale-105 ${
+                                                            aria-pressed={isSelected}
+                                                            className={`relative w-full text-left rounded-xl border-2 p-4 transition-all ${
                                                                 isSelected
                                                                     ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-sky-50 ring-2 ring-blue-500'
                                                                     : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                                                            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                                            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer transform hover:scale-105'}`}
                                                         >
                                                             {isPopular && !disabled && (
                                                                 <span className="absolute -top-3 right-4 bg-gradient-to-r from-blue-600 to-sky-600 text-white text-xs font-bold px-3 py-1 rounded-full">
-                                                                    MOST POPULAR 🌟
-                                                                </span>
+              MOST POPULAR 🌟
+            </span>
                                                             )}
+
                                                             <div className="flex items-center justify-between">
                                                                 <div>
                                                                     <div className="font-semibold text-gray-900">{plan.name}</div>
