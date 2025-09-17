@@ -886,50 +886,65 @@ const sendEmail = async () => {
             </section>
 
             {/* Footer */}
-            <footer className="bg-gradient-to-b from-gray-900 to-black text-gray-400 py-12 border-t border-blue-800/30">
+            <footer className="bg-gray-50 text-gray-600 py-12 border-t border-gray-200">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="grid md:grid-cols-4 gap-8">
                         <div>
                             <div className="flex items-center gap-2 mb-4">
-                                <Image src="/logo.svg" alt="MonkeysLegion" width={160} height={38} className="rounded-xl" />
+                                <Image src="/logo.svg" alt="MonkeysMail" width={160} height={38} className="rounded-xl" />
                             </div>
                             <p className="text-sm">
                                 Email infrastructure that scales with your business.
                             </p>
                         </div>
+
                         <div>
-                            <h4 className="font-semibold text-white mb-3">Product</h4>
+                            <h4 className="font-semibold text-gray-900 mb-3">Product</h4>
                             <ul className="space-y-2 text-sm">
-                                <li><a href="#features" className="hover:text-blue-400 transition-colors">Features</a></li>
-                                <li><a href="#pricing" className="hover:text-blue-400 transition-colors">Pricing</a></li>
-                                <li><a href="/docs" className="hover:text-blue-400 transition-colors">Documentation</a></li>
-                                <li><a href="/api" className="hover:text-blue-400 transition-colors">API Reference</a></li>
+                                <li><a href="#features" className="hover:text-blue-600 transition-colors">Features</a></li>
+                                <li><a href="#pricing" className="hover:text-blue-600 transition-colors">Pricing</a></li>
+                                <li><a href="/docs" className="hover:text-blue-600 transition-colors">Documentation</a></li>
+                                <li><a href="/api" className="hover:text-blue-600 transition-colors">API Reference</a></li>
                             </ul>
                         </div>
+
                         <div>
-                            <h4 className="font-semibold text-white mb-3">Company</h4>
+                            <h4 className="font-semibold text-gray-900 mb-3">Company</h4>
                             <ul className="space-y-2 text-sm">
-                                <li><a href="/about" className="hover:text-blue-400 transition-colors">About</a></li>
-                                <li><a href="/blog" className="hover:text-blue-400 transition-colors">Blog</a></li>
-                                <li><a href="/careers" className="hover:text-blue-400 transition-colors">Careers</a></li>
-                                <li><a href="/contact" className="hover:text-blue-400 transition-colors">Contact</a></li>
+                                <li><a href="/about" className="hover:text-blue-600 transition-colors">About</a></li>
+                                <li><a href="/blog" className="hover:text-blue-600 transition-colors">Blog</a></li>
+                                <li><a href="/careers" className="hover:text-blue-600 transition-colors">Careers</a></li>
+                                <li><a href="/contact" className="hover:text-blue-600 transition-colors">Contact</a></li>
                             </ul>
                         </div>
+
                         <div>
-                            <h4 className="font-semibold text-white mb-3">Legal</h4>
+                            <h4 className="font-semibold text-gray-900 mb-3">Legal</h4>
                             <ul className="space-y-2 text-sm">
-                                <li><a href="/terms" className="hover:text-blue-400 transition-colors">Terms</a></li>
-                                <li><a href="/privacy" className="hover:text-blue-400 transition-colors">Privacy</a></li>
-                                <li><a href="/security" className="hover:text-blue-400 transition-colors">Security</a></li>
-                                <li><a href="/gdpr" className="hover:text-blue-400 transition-colors">GDPR</a></li>
+                                <li><a href="/terms" className="hover:text-blue-600 transition-colors">Terms</a></li>
+                                <li><a href="/privacy" className="hover:text-blue-600 transition-colors">Privacy</a></li>
+                                <li><a href="/security" className="hover:text-blue-600 transition-colors">Security</a></li>
+                                <li><a href="/gdpr" className="hover:text-blue-600 transition-colors">GDPR</a></li>
                             </ul>
                         </div>
                     </div>
-                    <div className="mt-8 pt-8 border-t border-gray-800 text-center text-sm">
+
+                    <div className="mt-8 pt-8 border-t border-gray-200 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between text-sm">
                         <p>© {new Date().getFullYear()} MonkeysMail. All rights reserved. Made with 💙 and 🐵</p>
+
+                        <a
+                            href="https://monkeyslegion.com/"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 hover:text-gray-900"
+                        >
+                            <span>Powered by</span>
+                            <Image src="/MonkeysLegion.svg" alt="MonkeysLegion" width={140} height={28} />
+                        </a>
                     </div>
                 </div>
             </footer>
+
 
             {/* Custom CSS for animations */}
             <style jsx>{`
