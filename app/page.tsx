@@ -864,7 +864,7 @@ const sendEmail = async () => {
                         Transform Your Email Infrastructure Today
                     </h2>
                     <p className="text-xl text-blue-100 mb-8">
-                        Join 50,000+ developers sending billions of emails every month
+                        Join 10,000+ developers sending billions of emails every month
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                         <a
