@@ -826,7 +826,7 @@ export default function MonkeysMailLanding() {
                                     <pre className="p-6 text-sm text-gray-300 overflow-x-auto">
                                         <code>{`// Send an email with MonkeysMail 🐵
 const sendEmail = async () => {
-  const response = await fetch('https://api.monkeysmail.com/messages/send', {
+  const response = await fetch('https://smtp.monkeysmail.com/messages/send', {
     method: 'POST',
     headers: {
       'X-API-Key': 'mm_live.abc123.your-secret-key',
