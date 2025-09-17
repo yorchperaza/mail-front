@@ -6,11 +6,7 @@ import { useRouter } from 'next/navigation';
 import { loadStripe } from '@stripe/stripe-js';
 import { Elements, PaymentElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import {
-    ArrowRightIcon,
-    ShieldCheckIcon,
     ChartBarIcon,
-    BoltIcon,
-    EnvelopeIcon,
     CodeBracketIcon,
     EyeIcon,
     EyeSlashIcon,
@@ -20,6 +16,8 @@ import {
     BeakerIcon,
     ServerStackIcon,
     ArrowPathIcon,
+    SparklesIcon,
+    RocketLaunchIcon,
 } from '@heroicons/react/24/outline';
 
 /* ========================= Types (match backend) ========================= */
@@ -124,9 +122,9 @@ const StripePayment = forwardRef<StripePaymentHandle, { note?: string }>(functio
     });
 
     return (
-        <div className="rounded-xl bg-gray-50 ring-1 ring-gray-200 p-4">
+        <div className="rounded-2xl bg-white/50 backdrop-blur-sm ring-1 ring-blue-200/50 p-4">
             <PaymentElement options={{ layout: 'accordion' }} />
-            {note && <p className="mt-2 text-xs text-gray-600">{note}</p>}
+            {note && <p className="mt-2 text-xs text-blue-600">{note}</p>}
             {localError && <p className="mt-2 text-xs text-red-600">{localError}</p>}
         </div>
     );
@@ -177,7 +175,7 @@ export default function MonkeysMailLanding() {
     const stripeConfirmRef = useRef<StripePaymentHandle | null>(null);
 
     const selected = selectedPlanId != null ? details[selectedPlanId] : undefined;
-    const requireCard = (selected?.monthlyPrice ?? 0) > 0; // paid plans need card
+    const requireCard = (selected?.monthlyPrice ?? 0) > 0;
 
     /* -------------------------- Load plans (dynamic) -------------------------- */
     useEffect(() => {
@@ -193,7 +191,7 @@ export default function MonkeysMailLanding() {
                 const items = (await res.json()) as PlanBrief[];
                 if (cancelled) return;
                 setBrief(items);
-                if (items.length > 1) setSelectedPlanId(items[1].id); else if (items.length > 0) setSelectedPlanId(items[0].id);
+                if (items.length > 1) setSelectedPlanId(items[2].id); else if (items.length > 0) setSelectedPlanId(items[0].id);
 
                 const pairs = await Promise.all(
                     items.map(async (p) => {
@@ -293,7 +291,7 @@ export default function MonkeysMailLanding() {
                     password,
                     plan_id: selectedPlanId,
                     stripe_payment_method: paymentMethodId,
-                    marketing_opt_in: !!marketingOptIn,
+                    marketing_opt_in: marketingOptIn,
                 }),
             });
 
@@ -311,30 +309,49 @@ export default function MonkeysMailLanding() {
     }
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 via-white to-gray-50">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-sky-50">
+            {/* Animated gradient mesh background */}
+            <div className="fixed inset-0 overflow-hidden pointer-events-none">
+                <div className="absolute -left-40 -top-40 h-96 w-96 animate-blob rounded-full bg-blue-300/30 mix-blend-multiply blur-3xl" />
+                <div className="animation-delay-2000 absolute -right-40 top-20 h-96 w-96 animate-blob rounded-full bg-cyan-300/30 mix-blend-multiply blur-3xl" />
+                <div className="animation-delay-4000 absolute -bottom-40 left-40 h-96 w-96 animate-blob rounded-full bg-sky-300/30 mix-blend-multiply blur-3xl" />
+                <div className="absolute right-40 bottom-20 h-96 w-96 animate-blob rounded-full bg-indigo-300/30 mix-blend-multiply blur-3xl" />
+            </div>
+
+            {/* Grid pattern overlay */}
+            <div
+                className="fixed inset-0 opacity-[0.03] pointer-events-none"
+                style={{
+                    backgroundImage: `linear-gradient(90deg, #000 1px, transparent 1px), linear-gradient(#000 1px, transparent 1px)`,
+                    backgroundSize: '50px 50px'
+                }}
+            />
+
             {/* Header */}
-            <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 border-b border-gray-200">
+            <header className="sticky top-0 z-50 backdrop-blur-xl bg-white/70 border-b border-purple-200/50">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between items-center h-16">
                         <div className="flex items-center gap-4">
-                            <Image src="/logo.svg" alt="MonkeysMail" width={140} height={28} priority />
-                            <div className="hidden md:block h-6 w-px bg-gray-300" />
-                            <span className="hidden md:inline-block text-sm text-gray-600">
+                            <div className="flex items-center gap-2">
+                                <Image src="/logo.svg" alt="MonkeysLegion" width={160} height={38} className="rounded-xl" />
+                            </div>
+                            <div className="hidden md:block h-6 w-px bg-blue-300" />
+                            <span className="hidden md:inline-block text-sm text-blue-700">
                                 Email Infrastructure for Modern Teams
                             </span>
                         </div>
                         <nav className="hidden md:flex items-center gap-2">
-                            <a href="#features" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-all">
+                            <a href="#features" className="px-4 py-2 text-sm font-medium text-blue-700 hover:text-blue-900 rounded-lg hover:bg-blue-100/50 transition-all">
                                 Features
                             </a>
-                            <a href="#pricing" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-all">
+                            <a href="#pricing" className="px-4 py-2 text-sm font-medium text-blue-700 hover:text-blue-900 rounded-lg hover:bg-blue-100/50 transition-all">
                                 Pricing
                             </a>
-                            <a href="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 rounded-lg hover:bg-gray-100 transition-all">
+                            <a href="/login" className="px-4 py-2 text-sm font-medium text-blue-700 hover:text-blue-900 rounded-lg hover:bg-blue-100/50 transition-all">
                                 Sign In
                             </a>
-                            <a href="#signup" className="ml-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-orange-500 to-orange-600 rounded-lg hover:from-orange-600 hover:to-orange-700 transition-all shadow-sm">
-                                Get Started
+                            <a href="#signup" className="ml-2 px-4 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-blue-600 rounded-lg hover:from-blue-700 hover:to-blue-700 transition-all shadow-lg hover:shadow-xl transform hover:scale-105">
+                                Get Started ✨
                             </a>
                         </nav>
                     </div>
@@ -342,94 +359,97 @@ export default function MonkeysMailLanding() {
             </header>
 
             {/* Hero Section */}
-            <section id="hero" className="relative overflow-hidden">
-                <div className="absolute inset-0 bg-gradient-to-br from-orange-50/30 via-transparent to-amber-50/30" />
-                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-20">
+            <section id="hero" className="relative overflow-hidden pt-12 pb-20">
+                <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="grid lg:grid-cols-2 gap-12">
                         {/* Left Content */}
-                        <div>
-                            <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-amber-50 to-orange-50 px-4 py-2 text-sm font-medium text-orange-700 ring-1 ring-orange-200 mb-8">
+                        <div className="relative z-10">
+                            {/* Animated badge */}
+                            <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-purple-100 to-blue-100 px-4 py-2 shadow-sm mb-8">
                                 <span className="relative flex h-2 w-2">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
                                     <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500" />
                                 </span>
-                                Trusted by 50,000+ developers worldwide
+                                <span className="text-sm font-medium text-blue-900">Trusted by 50,000+ developers</span>
                             </div>
 
-                            <h1 className="text-5xl lg:text-6xl font-bold text-gray-900 mb-6">
-                                Email Infrastructure
-                                <span className="block bg-gradient-to-r from-orange-500 to-amber-500 bg-clip-text text-transparent">
+                            <h1 className="relative">
+                                <span className="block text-5xl lg:text-7xl font-black leading-tight text-blue-500">
+                                    Email Infrastructure
+                                </span>
+                                <span className="block bg-gradient-to-br from-blue-900 via-blue-600 to-blue-600 bg-clip-text text-5xl lg:text-7xl font-black leading-tight text-transparent">
                                     That Scales With You
                                 </span>
+                                {/* Decorative underline */}
+                                <svg className="absolute -bottom-2 left-0 w-48" height="8" viewBox="0 0 200 8">
+                                    <path
+                                        d="M0 4 Q50 0 100 4 T200 4"
+                                        stroke="url(#blueGradient)"
+                                        strokeWidth="3"
+                                        fill="none"
+                                        strokeLinecap="round"
+                                        className="animate-draw"
+                                    />
+                                    <defs>
+                                        <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                                            <stop offset="0%" stopColor="#60a5fa" /> {/* blue-400 */}
+                                            <stop offset="100%" stopColor="#2563eb" /> {/* blue-600 */}
+                                        </linearGradient>
+                                    </defs>
+                                </svg>
                             </h1>
 
-                            <p className="text-xl text-gray-600 mb-8">
-                                Send transactional and marketing emails at scale. Built for developers, trusted by enterprises. Start with 5,000 free emails per month.
+                            <p className="mt-6 text-xl text-slate-700 leading-relaxed">
+                                Send transactional and marketing emails at scale. Built for developers, trusted by enterprises. Start with 4,500 free emails per month.
                             </p>
 
-                            {/* Feature Grid */}
-                            <div className="grid grid-cols-2 gap-4 mb-8">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center">
-                                        <BoltIcon className="h-5 w-5 text-white" />
-                                    </div>
-                                    <div>
-                                        <div className="font-semibold text-gray-900">Lightning Fast</div>
-                                        <div className="text-sm text-gray-600">Sub-100ms API</div>
-                                    </div>
+                            {/* Feature pills */}
+                            <div className="mt-8 flex flex-wrap gap-3">
+                                <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white/80 px-4 py-2 text-sm backdrop-blur-sm">
+                                    <span className="text-blue-600">✓</span>
+                                    <span>Lightning Fast API</span>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
-                                        <ShieldCheckIcon className="h-5 w-5 text-white" />
-                                    </div>
-                                    <div>
-                                        <div className="font-semibold text-gray-900">99.99% Uptime</div>
-                                        <div className="text-sm text-gray-600">Enterprise SLA</div>
-                                    </div>
+                                <div className="inline-flex items-center gap-2 rounded-full border border-sky-200 bg-white/80 px-4 py-2 text-sm backdrop-blur-sm">
+                                    <span className="text-sky-600">✓</span>
+                                    <span>99.99% Uptime</span>
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-purple-500 to-purple-600 flex items-center justify-center">
-                                        <ChartBarIcon className="h-5 w-5 text-white" />
-                                    </div>
-                                    <div>
-                                        <div className="font-semibold text-gray-900">Real-time Analytics</div>
-                                        <div className="text-sm text-gray-600">Track everything</div>
-                                    </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-indigo-600 flex items-center justify-center">
-                                        <CodeBracketIcon className="h-5 w-5 text-white" />
-                                    </div>
-                                    <div>
-                                        <div className="font-semibold text-gray-900">Developer First</div>
-                                        <div className="text-sm text-gray-600">RESTful API & SDKs</div>
-                                    </div>
+                                <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/80 px-4 py-2 text-sm backdrop-blur-sm">
+                                    <span className="text-cyan-600">✓</span>
+                                    <span>Real-time Analytics</span>
                                 </div>
                             </div>
 
-                            {/* Trust Indicators */}
-                            <div className="flex items-center gap-8">
-                                <div>
-                                    <div className="text-3xl font-bold text-orange-600">10B+</div>
-                                    <div className="text-sm text-gray-600">Emails sent monthly</div>
+                            {/* Trust indicators */}
+                            <div className="mt-10 flex items-center gap-6 text-sm text-slate-500">
+                                <div className="flex items-center gap-1">
+                                    <span>⭐⭐⭐⭐⭐</span>
+                                    <span>4.9/5 rating</span>
                                 </div>
-                                <div>
-                                    <div className="text-3xl font-bold text-orange-600">50K+</div>
-                                    <div className="text-sm text-gray-600">Active developers</div>
+                                <div className="flex items-center gap-2">
+                                    <span>🔒</span>
+                                    <span>256-bit encryption</span>
                                 </div>
-                                <div>
-                                    <div className="text-3xl font-bold text-orange-600">150+</div>
-                                    <div className="text-sm text-gray-600">Countries served</div>
+                                <div className="flex items-center gap-2">
+                                    <span>🚀</span>
+                                    <span>Sub-100ms API</span>
                                 </div>
                             </div>
                         </div>
 
-                        {/* Right: Signup Form */}
-                        <div id="signup" className="lg:ml-auto w-full max-w-md">
-                            <div className="rounded-xl bg-white shadow-sm ring-1 ring-gray-200 overflow-hidden">
-                                <div className="bg-gradient-to-r from-orange-500 to-amber-500 px-6 py-4">
+                        {/* Right: Signup Form with floating effect */}
+                        <div
+                            id="signup"
+                            className="relative lg:ml-auto w-full max-w-md"
+                        >
+                            {/* Floating badges */}
+                            <div className="absolute -right-4 -top-4 animate-float rounded-2xl bg-gradient-to-r from-green-400 to-green-600 px-4 py-2 text-sm font-bold text-white shadow-xl z-10">
+                                ✨ 30 Days Free
+                            </div>
+
+                            <div className="rounded-3xl bg-white/90 backdrop-blur-xl shadow-2xl ring-1 ring-blue-200/50 overflow-hidden">
+                                <div className="bg-gradient-to-r from-blue-600 to-sky-600 px-6 py-4">
                                     <h2 className="text-xl font-semibold text-white">Start Your Free Trial</h2>
-                                    <p className="text-orange-100 text-sm mt-1">30 days free</p>
+                                    <p className="text-blue-100 text-sm mt-1">No credit card required for free plan</p>
                                 </div>
 
                                 <div className="p-6 space-y-4">
@@ -455,7 +475,7 @@ export default function MonkeysMailLanding() {
                                             {plansLoading ? (
                                                 <div className="animate-pulse space-y-2">
                                                     {[1, 2, 3].map((i) => (
-                                                        <div key={i} className="h-16 bg-gray-200 rounded-lg" />
+                                                        <div key={i} className="h-16 bg-blue-100 rounded-xl" />
                                                     ))}
                                                 </div>
                                             ) : plansError ? (
@@ -466,7 +486,8 @@ export default function MonkeysMailLanding() {
                                                 brief.map((plan) => {
                                                     const d = details[plan.id];
                                                     const isSelected = selectedPlanId === plan.id;
-                                                    const isPopular = plan.id === (brief[1]?.id ?? -1);
+                                                    const mostPopularId = brief[2]?.id ?? brief[1]?.id ?? brief[0]?.id ?? -1;
+                                                    const isPopular = plan.id === mostPopularId;
                                                     const disabled = d?.monthlyPrice === null;
 
                                                     return (
@@ -475,15 +496,15 @@ export default function MonkeysMailLanding() {
                                                             type="button"
                                                             onClick={() => !disabled && setSelectedPlanId(plan.id)}
                                                             disabled={disabled}
-                                                            className={`relative w-full text-left rounded-lg border-2 p-4 transition-all ${
+                                                            className={`relative w-full text-left rounded-xl border-2 p-4 transition-all transform hover:scale-105 ${
                                                                 isSelected
-                                                                    ? 'border-orange-500 bg-orange-50 ring-1 ring-orange-500'
-                                                                    : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                                                    ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-sky-50 ring-2 ring-blue-500'
+                                                                    : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
                                                             } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
                                                         >
                                                             {isPopular && !disabled && (
-                                                                <span className="absolute -top-3 right-4 bg-gradient-to-r from-orange-500 to-amber-500 text-white text-xs font-bold px-3 py-1 rounded-full">
-                                                                    MOST POPULAR
+                                                                <span className="absolute -top-3 right-4 bg-gradient-to-r from-blue-600 to-sky-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+                                                                    MOST POPULAR 🌟
                                                                 </span>
                                                             )}
                                                             <div className="flex items-center justify-between">
@@ -496,7 +517,7 @@ export default function MonkeysMailLanding() {
                                                                     </div>
                                                                 </div>
                                                                 <div className="text-right">
-                                                                    <div className="text-2xl font-bold text-gray-900">
+                                                                    <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-sky-600 bg-clip-text text-transparent">
                                                                         {formatMoney(d?.monthlyPrice ?? null)}
                                                                     </div>
                                                                     {d?.monthlyPrice !== null && (
@@ -521,7 +542,7 @@ export default function MonkeysMailLanding() {
                                                 type="text"
                                                 value={fullName}
                                                 onChange={(e) => setFullName(e.target.value)}
-                                                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                                                className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                                 placeholder="John Doe"
                                             />
                                         </div>
@@ -533,7 +554,7 @@ export default function MonkeysMailLanding() {
                                                 type="text"
                                                 value={company}
                                                 onChange={(e) => setCompany(e.target.value)}
-                                                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                                                className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                                 placeholder="Acme Inc."
                                             />
                                         </div>
@@ -547,7 +568,7 @@ export default function MonkeysMailLanding() {
                                             type="email"
                                             value={email}
                                             onChange={(e) => setEmail(e.target.value)}
-                                            className="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500"
+                                            className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
                                             placeholder="john@company.com"
                                         />
                                     </div>
@@ -561,13 +582,13 @@ export default function MonkeysMailLanding() {
                                                 type={showPassword ? 'text' : 'password'}
                                                 value={password}
                                                 onChange={(e) => setPassword(e.target.value)}
-                                                className="w-full rounded-lg border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 pr-10"
+                                                className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10"
                                                 placeholder="Min. 10 characters"
                                             />
                                             <button
                                                 type="button"
                                                 onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-500 hover:text-blue-700"
                                             >
                                                 {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
                                             </button>
@@ -579,7 +600,7 @@ export default function MonkeysMailLanding() {
                                                         key={i}
                                                         className={`h-1 flex-1 rounded-full transition-all ${
                                                             passScore > i
-                                                                ? 'bg-gradient-to-r from-orange-400 to-orange-500'
+                                                                ? 'bg-gradient-to-r from-blue-400 to-sky-400'
                                                                 : 'bg-gray-200'
                                                         }`}
                                                     />
@@ -599,7 +620,7 @@ export default function MonkeysMailLanding() {
                                             )}
                                             {stripeLoading && (
                                                 <div className="animate-pulse">
-                                                    <div className="h-20 bg-gray-200 rounded-lg" />
+                                                    <div className="h-20 bg-blue-100 rounded-xl" />
                                                 </div>
                                             )}
                                             {!stripeLoading && stripePromise && stripeClientSecret && (
@@ -623,15 +644,15 @@ export default function MonkeysMailLanding() {
                                                 type="checkbox"
                                                 checked={agree}
                                                 onChange={(e) => setAgree(e.target.checked)}
-                                                className="mt-0.5 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                                                className="mt-0.5 rounded border-blue-300 text-blue-500 focus:ring-blue-500"
                                             />
                                             <span className="text-xs text-gray-600">
                                                 I agree to the{' '}
-                                                <a href="/terms" className="text-orange-600 hover:underline">
+                                                <a href="/terms" className="text-blue-600 hover:underline">
                                                     Terms of Service
                                                 </a>{' '}
                                                 and{' '}
-                                                <a href="/privacy" className="text-orange-600 hover:underline">
+                                                <a href="/privacy" className="text-blue-600 hover:underline">
                                                     Privacy Policy
                                                 </a>
                                             </span>
@@ -641,7 +662,7 @@ export default function MonkeysMailLanding() {
                                                 type="checkbox"
                                                 checked={marketingOptIn}
                                                 onChange={(e) => setMarketingOptIn(e.target.checked)}
-                                                className="mt-0.5 rounded border-gray-300 text-orange-500 focus:ring-orange-500"
+                                                className="mt-0.5 rounded border-blue-300 text-blue-500 focus:ring-blue-500"
                                             />
                                             <span className="text-xs text-gray-600">
                                                 Send me product updates and tips
@@ -652,7 +673,7 @@ export default function MonkeysMailLanding() {
                                     <button
                                         onClick={handleRegistration}
                                         disabled={loading || (requireCard && (!stripeClientSecret || !!stripeSetupError))}
-                                        className="w-full inline-flex items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-orange-500 to-orange-600 px-4 py-3 text-sm font-medium text-white shadow-sm hover:from-orange-600 hover:to-orange-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                        className="group w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-sky-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:from-blue-700 hover:to-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105"
                                     >
                                         {loading ? (
                                             <>
@@ -662,14 +683,14 @@ export default function MonkeysMailLanding() {
                                         ) : (
                                             <>
                                                 Start Free Trial
-                                                <ArrowRightIcon className="h-4 w-4" />
+                                                <span className="transition-transform group-hover:translate-x-1">🚀</span>
                                             </>
                                         )}
                                     </button>
 
                                     <p className="text-center text-sm text-gray-600">
                                         Already have an account?{' '}
-                                        <a href="/login" className="font-medium text-orange-600 hover:text-orange-700">
+                                        <a href="/login" className="font-medium text-blue-600 hover:text-blue-700">
                                             Sign in
                                         </a>
                                     </p>
@@ -680,35 +701,42 @@ export default function MonkeysMailLanding() {
                 </div>
             </section>
 
-            {/* Stats Section */}
-            <section className="py-16 bg-white border-y border-gray-200">
+            {/* Animated Stats Section */}
+            <section className="py-16 relative">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                        <div className="rounded-xl bg-gradient-to-br from-emerald-50 to-emerald-100 p-6 text-center ring-1 ring-emerald-200">
-                            <div className="text-3xl font-bold text-emerald-700">99.99%</div>
-                            <div className="mt-1 text-sm text-emerald-600">Uptime SLA</div>
-                        </div>
-                        <div className="rounded-xl bg-gradient-to-br from-blue-50 to-blue-100 p-6 text-center ring-1 ring-blue-200">
-                            <div className="text-3xl font-bold text-blue-700">100ms</div>
-                            <div className="mt-1 text-sm text-blue-600">API Response</div>
-                        </div>
-                        <div className="rounded-xl bg-gradient-to-br from-purple-50 to-purple-100 p-6 text-center ring-1 ring-purple-200">
-                            <div className="text-3xl font-bold text-purple-700">GDPR</div>
-                            <div className="mt-1 text-sm text-purple-600">Compliant</div>
-                        </div>
-                        <div className="rounded-xl bg-gradient-to-br from-amber-50 to-amber-100 p-6 text-center ring-1 ring-amber-200">
-                            <div className="text-3xl font-bold text-amber-700">24/7</div>
-                            <div className="mt-1 text-sm text-amber-600">Support</div>
-                        </div>
+                        {[
+                            { value: '1B+', label: 'Emails/month', color: 'from-emerald-400 to-emerald-600', icon: '📧' },
+                            { value: '10K+', label: 'Developers', color: 'from-blue-400 to-blue-600', icon: '👨‍💻' },
+                            { value: '99.99%', label: 'Uptime SLA', color: 'from-purple-400 to-purple-600', icon: '⚡' },
+                            { value: '150+', label: 'Countries', color: 'from-amber-400 to-amber-600', icon: '🌍' },
+                        ].map((stat, idx) => (
+                            <div
+                                key={idx}
+                                className="group relative rounded-2xl bg-white/80 backdrop-blur-sm p-6 text-center ring-1 ring-blue-200/50 hover:ring-blue-300 transition-all hover:scale-105 hover:shadow-xl"
+                            >
+                                <div className="text-3xl mb-2">{stat.icon}</div>
+                                <div className={`text-3xl font-bold bg-gradient-to-r ${stat.color} bg-clip-text text-transparent`}>
+                                    {stat.value}
+                                </div>
+                                <div className="mt-1 text-sm text-gray-600">{stat.label}</div>
+                            </div>
+                        ))}
                     </div>
                 </div>
             </section>
 
-            {/* Features Section */}
-            <section id="features" className="py-20 bg-gradient-to-br from-gray-50 via-white to-gray-50">
+            {/* Features Section with floating cards */}
+            <section id="features" className="py-20 relative">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="text-center mb-12">
-                        <h2 className="text-3xl font-bold text-gray-900">Everything You Need to Scale</h2>
+                        <span className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-blue-100 to-sky-100 px-4 py-2 text-sm font-medium text-blue-900 mb-4">
+                            <SparklesIcon className="h-4 w-4" />
+                            Features
+                        </span>
+                        <h2 className="text-3xl font-bold bg-gradient-to-r from-blue-900 to-sky-900 bg-clip-text text-transparent">
+                            Everything You Need to Scale
+                        </h2>
                         <p className="mt-4 text-lg text-gray-600">
                             Powerful features that grow with your business
                         </p>
@@ -721,43 +749,52 @@ export default function MonkeysMailLanding() {
                                 title: 'Powerful API',
                                 description: 'RESTful API with SDKs for all major languages',
                                 gradient: 'from-blue-500 to-blue-600',
+                                delay: '0'
                             },
                             {
                                 icon: InboxArrowDownIcon,
                                 title: 'Inbound Processing',
                                 description: 'Parse incoming emails and route to webhooks',
                                 gradient: 'from-purple-500 to-purple-600',
+                                delay: '100'
                             },
                             {
                                 icon: CheckCircleIcon,
                                 title: 'Email Validation',
                                 description: 'Verify addresses before sending',
                                 gradient: 'from-emerald-500 to-emerald-600',
+                                delay: '200'
                             },
                             {
                                 icon: ChartBarIcon,
                                 title: 'Real-time Analytics',
                                 description: 'Track opens, clicks, bounces instantly',
                                 gradient: 'from-indigo-500 to-indigo-600',
+                                delay: '300'
                             },
                             {
                                 icon: BeakerIcon,
                                 title: 'A/B Testing',
                                 description: 'Test and optimize your campaigns',
                                 gradient: 'from-pink-500 to-pink-600',
+                                delay: '400'
                             },
                             {
                                 icon: ServerStackIcon,
                                 title: 'Dedicated IPs',
                                 description: 'Improve deliverability with your own IPs',
                                 gradient: 'from-amber-500 to-amber-600',
+                                delay: '500'
                             },
                         ].map((feature, index) => (
                             <div
                                 key={index}
-                                className="group rounded-xl bg-white p-6 shadow-sm ring-1 ring-gray-200 hover:shadow-lg hover:ring-gray-300 transition-all"
+                                className="group relative rounded-2xl bg-white/90 backdrop-blur-sm p-6 shadow-lg ring-1 ring-blue-200/50 hover:ring-blue-300 transition-all hover:scale-105 hover:shadow-xl hover:-translate-y-2"
+                                style={{
+                                    animationDelay: `${feature.delay}ms`
+                                }}
                             >
-                                <div className={`inline-flex h-12 w-12 items-center justify-center rounded-lg bg-gradient-to-br ${feature.gradient} mb-4`}>
+                                <div className={`inline-flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br ${feature.gradient} mb-4 group-hover:scale-110 transition-transform`}>
                                     <feature.icon className="h-6 w-6 text-white" />
                                 </div>
                                 <h3 className="text-lg font-semibold text-gray-900 mb-2">{feature.title}</h3>
@@ -766,62 +803,80 @@ export default function MonkeysMailLanding() {
                         ))}
                     </div>
 
-                    {/* Code Example */}
+                    {/* Code Example with glassmorphism */}
                     <div className="mt-20">
                         <div className="text-center mb-8">
-                            <h3 className="text-2xl font-bold text-gray-900">Simple Integration</h3>
+                            <h3 className="text-2xl font-bold bg-gradient-to-r from-blue-900 to-sky-900 bg-clip-text text-transparent">
+                                Simple Integration
+                            </h3>
                             <p className="mt-2 text-gray-600">Get started in minutes with our intuitive API</p>
                         </div>
 
                         <div className="max-w-3xl mx-auto">
-                            <div className="rounded-xl bg-gray-900 p-1 shadow-2xl">
-                                <div className="flex items-center gap-2 rounded-t-lg bg-gray-800 px-4 py-3">
-                                    <div className="flex gap-1.5">
-                                        <div className="h-3 w-3 rounded-full bg-red-500" />
-                                        <div className="h-3 w-3 rounded-full bg-yellow-500" />
-                                        <div className="h-3 w-3 rounded-full bg-green-500" />
+                            <div className="rounded-3xl bg-gradient-to-br from-blue-900 to-sky-900 p-1 shadow-2xl">
+                                <div className="rounded-3xl bg-gray-900/95 backdrop-blur-xl overflow-hidden">
+                                    <div className="flex items-center gap-2 bg-gray-800/50 px-4 py-3 border-b border-gray-700">
+                                        <div className="flex gap-1.5">
+                                            <div className="h-3 w-3 rounded-full bg-red-500" />
+                                            <div className="h-3 w-3 rounded-full bg-yellow-500" />
+                                            <div className="h-3 w-3 rounded-full bg-green-500" />
+                                        </div>
+                                        <span className="ml-2 text-xs text-gray-400">example.js</span>
                                     </div>
-                                    <span className="ml-2 text-xs text-gray-400">example.js</span>
+                                    <pre className="p-6 text-sm text-gray-300 overflow-x-auto">
+                                        <code>{`// Send an email with MonkeysMail 🐵
+const sendEmail = async () => {
+  const response = await fetch('https://api.monkeysmail.com/messages/send', {
+    method: 'POST',
+    headers: {
+      'X-API-Key': 'mm_live.abc123.your-secret-key',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      to: ['customer@example.com'],
+      subject: 'Welcome to our platform!',
+      html: '<h1>Welcome!</h1><p>Thanks for signing up.</p>',
+      text: 'Welcome! Thanks for signing up.',
+      from: 'noreply@yourdomain.com'
+    })
+  });
+  
+  const data = await response.json();
+  console.log('Email sent:', data);
+};`}</code>
+                                    </pre>
                                 </div>
-                                <pre className="p-6 text-sm text-gray-300 overflow-x-auto">
-                                    <code>{`// Send an email with MonkeysMail
-const MonkeysMail = require('monkeysmail');
-const client = new MonkeysMail('YOUR_API_KEY');
-
-await client.messages.send({
-  from: 'hello@yourdomain.com',
-  to: 'customer@example.com',
-  subject: 'Welcome to MonkeysMail! 🐵',
-  html: '<h1>Start sending emails in minutes!</h1>',
-  tracking: true
-});`}</code>
-                                </pre>
                             </div>
                         </div>
                     </div>
                 </div>
             </section>
 
-            {/* CTA Section */}
-            <section className="py-20 bg-gradient-to-r from-orange-500 to-amber-500">
-                <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            {/* CTA Section with animated gradient */}
+            <section className="py-20 relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-sky-600 to-blue-600 animate-gradient-x" />
+                <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white/20 backdrop-blur-sm px-4 py-2 text-sm font-medium text-white mb-6">
+                        <RocketLaunchIcon className="h-4 w-4" />
+                        Ready to launch?
+                    </div>
                     <h2 className="text-3xl font-bold text-white mb-4">
-                        Ready to Transform Your Email Infrastructure?
+                        Transform Your Email Infrastructure Today
                     </h2>
-                    <p className="text-xl text-orange-100 mb-8">
+                    <p className="text-xl text-blue-100 mb-8">
                         Join 50,000+ developers sending billions of emails every month
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 justify-center">
                         <a
                             href="#signup"
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-white px-6 py-3 text-sm font-medium text-orange-600 shadow-lg hover:bg-gray-50 transition-all"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-white px-6 py-3 text-sm font-medium text-blue-600 shadow-lg hover:bg-gray-50 transition-all transform hover:scale-105"
                         >
                             Start Free Trial
-                            <ArrowRightIcon className="h-4 w-4" />
+                            <span>🐵</span>
                         </a>
                         <a
                             href="/docs"
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-6 py-3 text-sm font-medium text-white shadow-lg hover:bg-orange-700 transition-all"
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700/50 backdrop-blur-sm px-6 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-700/70 transition-all transform hover:scale-105"
                         >
                             View Documentation
                             <CodeBracketIcon className="h-4 w-4" />
@@ -831,12 +886,12 @@ await client.messages.send({
             </section>
 
             {/* Footer */}
-            <footer className="bg-gray-900 text-gray-400 py-12 border-t border-gray-800">
+            <footer className="bg-gradient-to-b from-gray-900 to-black text-gray-400 py-12 border-t border-blue-800/30">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="grid md:grid-cols-4 gap-8">
                         <div>
                             <div className="flex items-center gap-2 mb-4">
-                                <EnvelopeIcon className="h-6 w-6 text-orange-500" />
+                                <span className="text-2xl">🐵</span>
                                 <span className="font-bold text-white">MonkeysMail</span>
                             </div>
                             <p className="text-sm">
@@ -846,36 +901,102 @@ await client.messages.send({
                         <div>
                             <h4 className="font-semibold text-white mb-3">Product</h4>
                             <ul className="space-y-2 text-sm">
-                                <li><a href="#features" className="hover:text-white">Features</a></li>
-                                <li><a href="#pricing" className="hover:text-white">Pricing</a></li>
-                                <li><a href="/docs" className="hover:text-white">Documentation</a></li>
-                                <li><a href="/api" className="hover:text-white">API Reference</a></li>
+                                <li><a href="#features" className="hover:text-blue-400 transition-colors">Features</a></li>
+                                <li><a href="#pricing" className="hover:text-blue-400 transition-colors">Pricing</a></li>
+                                <li><a href="/docs" className="hover:text-blue-400 transition-colors">Documentation</a></li>
+                                <li><a href="/api" className="hover:text-blue-400 transition-colors">API Reference</a></li>
                             </ul>
                         </div>
                         <div>
                             <h4 className="font-semibold text-white mb-3">Company</h4>
                             <ul className="space-y-2 text-sm">
-                                <li><a href="/about" className="hover:text-white">About</a></li>
-                                <li><a href="/blog" className="hover:text-white">Blog</a></li>
-                                <li><a href="/careers" className="hover:text-white">Careers</a></li>
-                                <li><a href="/contact" className="hover:text-white">Contact</a></li>
+                                <li><a href="/about" className="hover:text-blue-400 transition-colors">About</a></li>
+                                <li><a href="/blog" className="hover:text-blue-400 transition-colors">Blog</a></li>
+                                <li><a href="/careers" className="hover:text-blue-400 transition-colors">Careers</a></li>
+                                <li><a href="/contact" className="hover:text-blue-400 transition-colors">Contact</a></li>
                             </ul>
                         </div>
                         <div>
                             <h4 className="font-semibold text-white mb-3">Legal</h4>
                             <ul className="space-y-2 text-sm">
-                                <li><a href="/terms" className="hover:text-white">Terms</a></li>
-                                <li><a href="/privacy" className="hover:text-white">Privacy</a></li>
-                                <li><a href="/security" className="hover:text-white">Security</a></li>
-                                <li><a href="/gdpr" className="hover:text-white">GDPR</a></li>
+                                <li><a href="/terms" className="hover:text-blue-400 transition-colors">Terms</a></li>
+                                <li><a href="/privacy" className="hover:text-blue-400 transition-colors">Privacy</a></li>
+                                <li><a href="/security" className="hover:text-blue-400 transition-colors">Security</a></li>
+                                <li><a href="/gdpr" className="hover:text-blue-400 transition-colors">GDPR</a></li>
                             </ul>
                         </div>
                     </div>
                     <div className="mt-8 pt-8 border-t border-gray-800 text-center text-sm">
-                        <p>© {new Date().getFullYear()} MonkeysMail. All rights reserved.</p>
+                        <p>© {new Date().getFullYear()} MonkeysMail. All rights reserved. Made with 💙 and 🐵</p>
                     </div>
                 </div>
             </footer>
+
+            {/* Custom CSS for animations */}
+            <style jsx>{`
+                @keyframes blob {
+                    0%, 100% {
+                        transform: translate(0, 0) scale(1);
+                    }
+                    33% {
+                        transform: translate(30px, -50px) scale(1.1);
+                    }
+                    66% {
+                        transform: translate(-20px, 20px) scale(0.9);
+                    }
+                }
+
+                @keyframes float {
+                    0%, 100% {
+                        transform: translateY(0);
+                    }
+                    50% {
+                        transform: translateY(-10px);
+                    }
+                }
+
+                @keyframes draw {
+                    to {
+                        stroke-dashoffset: 0;
+                    }
+                }
+
+                @keyframes gradient-x {
+                    0%, 100% {
+                        background-position: 0% 50%;
+                    }
+                    50% {
+                        background-position: 100% 50%;
+                    }
+                }
+
+                .animate-blob {
+                    animation: blob 7s infinite;
+                }
+
+                .animate-float {
+                    animation: float 3s ease-in-out infinite;
+                }
+
+                .animate-draw {
+                    stroke-dasharray: 200;
+                    stroke-dashoffset: 200;
+                    animation: draw 2s ease-out forwards;
+                }
+
+                .animate-gradient-x {
+                    background-size: 200% 200%;
+                    animation: gradient-x 3s ease infinite;
+                }
+
+                .animation-delay-2000 {
+                    animation-delay: 2s;
+                }
+
+                .animation-delay-4000 {
+                    animation-delay: 4s;
+                }
+            `}</style>
         </div>
     );
 }
