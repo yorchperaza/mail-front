@@ -17,7 +17,11 @@ import {
     ServerStackIcon,
     ArrowPathIcon,
     SparklesIcon,
-    RocketLaunchIcon, BoltIcon, ShieldCheckIcon,
+    RocketLaunchIcon,
+    BoltIcon,
+    ShieldCheckIcon,
+    ArrowLeftIcon,
+    CreditCardIcon,
 } from '@heroicons/react/24/outline';
 
 /* ========================= Types (match backend) ========================= */
@@ -154,6 +158,18 @@ export default function MonkeysMailLanding() {
     const [marketingOptIn, setMarketingOptIn] = useState(true);
     const defaultPickDone = useRef(false);
 
+    // 2-Step form state
+    const [currentStep, setCurrentStep] = useState<'info' | 'payment'>('info');
+    const [formData, setFormData] = useState<{
+        fullName: string;
+        company: string;
+        email: string;
+        password: string;
+        planId: number;
+        agree: boolean;
+        marketingOptIn: boolean;
+    } | null>(null);
+
     // Password score
     const passScore = useMemo(() => {
         let s = 0;
@@ -221,15 +237,18 @@ export default function MonkeysMailLanding() {
         };
     }, []);
 
-    /* -------- Create SetupIntent when a paid plan is chosen (Stripe) -------- */
+    /* -------- Create SetupIntent when moving to payment step -------- */
     useEffect(() => {
         let cancel = false;
         (async () => {
             setStripeSetupError(null);
-            if (!requireCard) {
+
+            // Only create setup intent if we're on payment step and need a card
+            if (currentStep !== 'payment' || !requireCard) {
                 setStripeClientSecret(null);
                 return;
             }
+
             if (!process.env.NEXT_PUBLIC_STRIPE_PK) {
                 setStripeSetupError('Payments unavailable (missing Stripe publishable key).');
                 return;
@@ -254,10 +273,10 @@ export default function MonkeysMailLanding() {
         return () => {
             cancel = true;
         };
-    }, [requireCard, selectedPlanId]);
+    }, [currentStep, requireCard, selectedPlanId]);
 
-    /* ----------------------------- Registration ----------------------------- */
-    async function handleRegistration() {
+    /* ----------------------------- Step 1: Initial form ----------------------------- */
+    async function handleStep1Submit() {
         setError(null);
 
         if (!fullName || !company || !email || !password) {
@@ -277,35 +296,75 @@ export default function MonkeysMailLanding() {
             return;
         }
 
+        // Save form data
+        setFormData({
+            fullName,
+            company,
+            email,
+            password,
+            planId: selectedPlanId,
+            agree,
+            marketingOptIn,
+        });
+
+        // If it's a free plan, register immediately
+        if (!requireCard) {
+            await handleRegistration(null);
+        } else {
+            // Move to payment step
+            setCurrentStep('payment');
+        }
+    }
+
+    /* ----------------------------- Step 2: Payment ----------------------------- */
+    async function handleStep2Submit() {
+        setError(null);
+        setLoading(true);
+
+        try {
+            if (!stripeConfirmRef.current) throw new Error('Payment form not ready.');
+            const paymentMethodId = await stripeConfirmRef.current();
+            await handleRegistration(paymentMethodId);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'Payment confirmation failed.');
+            setLoading(false);
+        }
+    }
+
+    /* ----------------------------- Final Registration ----------------------------- */
+    async function handleRegistration(paymentMethodId: string | null) {
+        const data = formData || {
+            fullName,
+            company,
+            email,
+            password,
+            planId: selectedPlanId!,
+            agree,
+            marketingOptIn,
+        };
+
         setLoading(true);
         try {
-            let paymentMethodId: string | null = null;
-
-            if (requireCard) {
-                if (!stripeConfirmRef.current) throw new Error('Payment form not ready.');
-                paymentMethodId = await stripeConfirmRef.current();
-            }
-
             const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    name: fullName,
-                    company,
-                    email,
-                    password,
-                    plan_id: selectedPlanId,
+                    name: data.fullName,
+                    company: data.company,
+                    email: data.email,
+                    password: data.password,
+                    plan_id: data.planId,
                     stripe_payment_method: paymentMethodId,
-                    marketing_opt_in: marketingOptIn,
+                    marketing_opt_in: data.marketingOptIn,
                 }),
             });
 
-            const data = (await res.json().catch(() => ({}))) as ApiError;
+            const responseData = (await res.json().catch(() => ({}))) as ApiError;
             if (res.status === 201) {
                 router.push('/login?registered=1');
                 return;
             }
-            throw new Error((typeof data.message === 'string' && data.message) || 'Registration failed. Please try again.');
+            throw new Error((typeof responseData.message === 'string' && responseData.message) || 'Registration failed. Please try again.');
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
         } finally {
@@ -346,10 +405,10 @@ export default function MonkeysMailLanding() {
                             </span>
                         </div>
                         <nav className="hidden md:flex items-center gap-2">
-                            <a href="#features" className="px-4 py-2 text-sm font-medium text-blue-700 hover:text-blue-900 rounded-lg hover:bg-blue-100/50 transition-all">
+                            <a href="https://monkeysmail.com/features" target="_blank" className="px-4 py-2 text-sm font-medium text-blue-700 hover:text-blue-900 rounded-lg hover:bg-blue-100/50 transition-all">
                                 Features
                             </a>
-                            <a href="#pricing" className="px-4 py-2 text-sm font-medium text-blue-700 hover:text-blue-900 rounded-lg hover:bg-blue-100/50 transition-all">
+                            <a href="https://monkeysmail.com/pricing" target="_blank" className="px-4 py-2 text-sm font-medium text-blue-700 hover:text-blue-900 rounded-lg hover:bg-blue-100/50 transition-all">
                                 Pricing
                             </a>
                             <a href="/login" className="px-4 py-2 text-sm font-medium text-blue-700 hover:text-blue-900 rounded-lg hover:bg-blue-100/50 transition-all">
@@ -397,8 +456,8 @@ export default function MonkeysMailLanding() {
                                     />
                                     <defs>
                                         <linearGradient id="blueGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                                            <stop offset="0%" stopColor="#60a5fa" /> {/* blue-400 */}
-                                            <stop offset="100%" stopColor="#2563eb" /> {/* blue-600 */}
+                                            <stop offset="0%" stopColor="#60a5fa" />
+                                            <stop offset="100%" stopColor="#2563eb" />
                                         </linearGradient>
                                     </defs>
                                 </svg>
@@ -441,7 +500,7 @@ export default function MonkeysMailLanding() {
                             </div>
                         </div>
 
-                        {/* Right: Signup Form with floating effect */}
+                        {/* Right: Signup Form with steps */}
                         <div
                             id="signup"
                             className="relative lg:ml-auto w-full max-w-md"
@@ -453,9 +512,36 @@ export default function MonkeysMailLanding() {
 
                             <div className="rounded-3xl bg-white/90 backdrop-blur-xl shadow-2xl ring-1 ring-blue-200/50 overflow-hidden">
                                 <div className="bg-gradient-to-r from-blue-600 to-sky-600 px-6 py-4">
-                                    <h2 className="text-xl font-semibold text-white">Start Your Free Trial</h2>
-                                    <p className="text-blue-100 text-sm mt-1">No credit card required for free plan</p>
+                                    <h2 className="text-xl font-semibold text-white">
+                                        {currentStep === 'info' ? 'Start Your Free Trial' : 'Complete Your Registration'}
+                                    </h2>
+                                    <p className="text-blue-100 text-sm mt-1">
+                                        {currentStep === 'info'
+                                            ? 'No credit card required for free plan'
+                                            : 'Secure payment - Cancel anytime'}
+                                    </p>
                                 </div>
+
+                                {/* Step indicators */}
+                                {requireCard && currentStep === 'payment' && (
+                                    <div className="px-6 pt-4">
+                                        <div className="flex items-center justify-center">
+                                            <div className="flex items-center">
+                                                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-green-500 text-white text-sm font-medium">
+                                                    ✓
+                                                </div>
+                                                <span className="ml-2 text-sm font-medium text-gray-900">Account Info</span>
+                                            </div>
+                                            <div className="mx-4 h-px w-12 bg-gray-300" />
+                                            <div className="flex items-center">
+                                                <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-600 text-white text-sm font-medium">
+                                                    2
+                                                </div>
+                                                <span className="ml-2 text-sm font-medium text-gray-900">Payment</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
 
                                 <div className="p-6 space-y-4">
                                     {error && (
@@ -471,235 +557,301 @@ export default function MonkeysMailLanding() {
                                         </div>
                                     )}
 
-                                    {/* Plan Selection */}
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-2">
-                                            Choose Your Plan
-                                        </label>
-                                        <div className="space-y-2">
-                                            {plansLoading ? (
-                                                <div className="animate-pulse space-y-2">
-                                                    {[1, 2, 3].map((i) => (
-                                                        <div key={i} className="h-16 bg-blue-100 rounded-xl" />
-                                                    ))}
-                                                </div>
-                                            ) : plansError ? (
-                                                <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
-                                                    {plansError}
-                                                </div>
-                                            ) : (
-                                                brief.map((plan) => {
-                                                    const d = details[plan.id]; // may be undefined on first render
-                                                    const isSelected = selectedPlanId === plan.id;
+                                    {currentStep === 'info' ? (
+                                        <>
+                                            {/* Step 1: Account Information */}
+                                            {/* Plan Selection */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    Choose Your Plan
+                                                </label>
+                                                <div className="space-y-2">
+                                                    {plansLoading ? (
+                                                        <div className="animate-pulse space-y-2">
+                                                            {[1, 2, 3].map((i) => (
+                                                                <div key={i} className="h-16 bg-blue-100 rounded-xl" />
+                                                            ))}
+                                                        </div>
+                                                    ) : plansError ? (
+                                                        <div className="rounded-lg bg-amber-50 border border-amber-200 p-3 text-sm text-amber-800">
+                                                            {plansError}
+                                                        </div>
+                                                    ) : (
+                                                        brief.map((plan) => {
+                                                            const d = details[plan.id];
+                                                            const isSelected = selectedPlanId === plan.id;
+                                                            const mostPopularId = brief[2]?.id ?? brief[1]?.id ?? brief[0]?.id ?? -1;
+                                                            const isPopular = plan.id === mostPopularId;
+                                                            const disabled = !d || d.monthlyPrice === null;
 
-                                                    // Stable "most popular": prefer 3rd, else 2nd, else 1st
-                                                    const mostPopularId = brief[2]?.id ?? brief[1]?.id ?? brief[0]?.id ?? -1;
-                                                    const isPopular = plan.id === mostPopularId;
-
-                                                    // Disable if details not loaded yet OR plan is custom (monthlyPrice === null)
-                                                    const disabled = !d || d.monthlyPrice === null;
-
-                                                    return (
-                                                        <button
-                                                            key={plan.id}
-                                                            type="button"
-                                                            onClick={() => {
-                                                                if (!disabled) setSelectedPlanId(plan.id);
-                                                            }}
-                                                            disabled={disabled}
-                                                            aria-pressed={isSelected}
-                                                            className={`relative w-full text-left rounded-xl border-2 p-4 transition-all ${
-                                                                isSelected
-                                                                    ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-sky-50 ring-2 ring-blue-500'
-                                                                    : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                                                            } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer transform hover:scale-105'}`}
-                                                        >
-                                                            {isPopular && !disabled && (
-                                                                <span className="absolute -top-3 right-4 bg-gradient-to-r from-blue-600 to-sky-600 text-white text-xs font-bold px-3 py-1 rounded-full">
-              MOST POPULAR 🌟
-            </span>
-                                                            )}
-
-                                                            <div className="flex items-center justify-between">
-                                                                <div>
-                                                                    <div className="font-semibold text-gray-900">{plan.name}</div>
-                                                                    <div className="text-sm text-gray-600">
-                                                                        {d?.includedMessages != null && (
-                                                                            <span>{formatMessages(d.includedMessages)} emails/mo</span>
-                                                                        )}
-                                                                    </div>
-                                                                </div>
-                                                                <div className="text-right">
-                                                                    <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-sky-600 bg-clip-text text-transparent">
-                                                                        {formatMoney(d?.monthlyPrice ?? null)}
-                                                                    </div>
-                                                                    {d?.monthlyPrice !== null && (
-                                                                        <div className="text-xs text-gray-500">per month</div>
+                                                            return (
+                                                                <button
+                                                                    key={plan.id}
+                                                                    type="button"
+                                                                    onClick={() => {
+                                                                        if (!disabled) setSelectedPlanId(plan.id);
+                                                                    }}
+                                                                    disabled={disabled}
+                                                                    aria-pressed={isSelected}
+                                                                    className={`relative w-full text-left rounded-xl border-2 p-4 transition-all ${
+                                                                        isSelected
+                                                                            ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-sky-50 ring-2 ring-blue-500'
+                                                                            : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
+                                                                    } ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer transform hover:scale-105'}`}
+                                                                >
+                                                                    {isPopular && !disabled && (
+                                                                        <span className="absolute -top-3 right-4 bg-gradient-to-r from-blue-600 to-sky-600 text-white text-xs font-bold px-3 py-1 rounded-full">
+                                                                            MOST POPULAR 🌟
+                                                                        </span>
                                                                     )}
-                                                                </div>
-                                                            </div>
-                                                        </button>
-                                                    );
-                                                })
-                                            )}
-                                        </div>
-                                    </div>
 
-                                    {/* Form Fields */}
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Full Name *
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={fullName}
-                                                onChange={(e) => setFullName(e.target.value)}
-                                                className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                                placeholder="John Doe"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                                Company *
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={company}
-                                                onChange={(e) => setCompany(e.target.value)}
-                                                className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                                placeholder="Acme Inc."
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Work Email *
-                                        </label>
-                                        <input
-                                            type="email"
-                                            value={email}
-                                            onChange={(e) => setEmail(e.target.value)}
-                                            className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                                            placeholder="john@company.com"
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                                            Password *
-                                        </label>
-                                        <div className="relative">
-                                            <input
-                                                type={showPassword ? 'text' : 'password'}
-                                                value={password}
-                                                onChange={(e) => setPassword(e.target.value)}
-                                                className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10"
-                                                placeholder="Min. 10 characters"
-                                            />
-                                            <button
-                                                type="button"
-                                                onClick={() => setShowPassword(!showPassword)}
-                                                className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-500 hover:text-blue-700"
-                                            >
-                                                {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
-                                            </button>
-                                        </div>
-                                        <div className="mt-2">
-                                            <div className="flex gap-1">
-                                                {[0, 1, 2, 3].map((i) => (
-                                                    <div
-                                                        key={i}
-                                                        className={`h-1 flex-1 rounded-full transition-all ${
-                                                            passScore > i
-                                                                ? 'bg-gradient-to-r from-blue-400 to-sky-400'
-                                                                : 'bg-gray-200'
-                                                        }`}
-                                                    />
-                                                ))}
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Stripe Payment */}
-                                    {requireCard && (
-                                        <div>
-                                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                                Payment Method
-                                            </label>
-                                            {stripeSetupError && (
-                                                <div className="mb-2 text-sm text-red-600">{stripeSetupError}</div>
-                                            )}
-                                            {stripeLoading && (
-                                                <div className="animate-pulse">
-                                                    <div className="h-20 bg-blue-100 rounded-xl" />
+                                                                    <div className="flex items-center justify-between">
+                                                                        <div>
+                                                                            <div className="font-semibold text-gray-900">{plan.name}</div>
+                                                                            <div className="text-sm text-gray-600">
+                                                                                {d?.includedMessages != null && (
+                                                                                    <span>{formatMessages(d.includedMessages)} emails/mo</span>
+                                                                                )}
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="text-right">
+                                                                            <div className="text-2xl font-bold bg-gradient-to-r from-blue-600 to-sky-600 bg-clip-text text-transparent">
+                                                                                {formatMoney(d?.monthlyPrice ?? null)}
+                                                                            </div>
+                                                                            {d?.monthlyPrice !== null && d?.monthlyPrice !== 0 && (
+                                                                                <div className="text-xs text-gray-500">per month</div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                </button>
+                                                            );
+                                                        })
+                                                    )}
                                                 </div>
-                                            )}
-                                            {!stripeLoading && stripePromise && stripeClientSecret && (
-                                                <Elements
-                                                    stripe={stripePromise}
-                                                    options={{ clientSecret: stripeClientSecret, appearance: { theme: 'stripe' } }}
-                                                >
-                                                    <StripePayment
-                                                        ref={stripeConfirmRef}
-                                                        note="Card saved now, charged after 30-day trial"
+                                            </div>
+
+                                            {/* Form Fields */}
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                        Full Name *
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={fullName}
+                                                        onChange={(e) => setFullName(e.target.value)}
+                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                        placeholder="John Doe"
                                                     />
-                                                </Elements>
-                                            )}
-                                        </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                        Company *
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={company}
+                                                        onChange={(e) => setCompany(e.target.value)}
+                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                        placeholder="Acme Inc."
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Work Email *
+                                                </label>
+                                                <input
+                                                    type="email"
+                                                    value={email}
+                                                    onChange={(e) => setEmail(e.target.value)}
+                                                    className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                    placeholder="john@company.com"
+                                                />
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                    Password *
+                                                </label>
+                                                <div className="relative">
+                                                    <input
+                                                        type={showPassword ? 'text' : 'password'}
+                                                        value={password}
+                                                        onChange={(e) => setPassword(e.target.value)}
+                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10"
+                                                        placeholder="Min. 10 characters"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setShowPassword(!showPassword)}
+                                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-blue-500 hover:text-blue-700"
+                                                    >
+                                                        {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                                                    </button>
+                                                </div>
+                                                <div className="mt-2">
+                                                    <div className="flex gap-1">
+                                                        {[0, 1, 2, 3].map((i) => (
+                                                            <div
+                                                                key={i}
+                                                                className={`h-1 flex-1 rounded-full transition-all ${
+                                                                    passScore > i
+                                                                        ? 'bg-gradient-to-r from-blue-400 to-sky-400'
+                                                                        : 'bg-gray-200'
+                                                                }`}
+                                                            />
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Agreements */}
+                                            <div className="space-y-2">
+                                                <label className="flex items-start gap-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={agree}
+                                                        onChange={(e) => setAgree(e.target.checked)}
+                                                        className="mt-0.5 rounded border-blue-300 text-blue-500 focus:ring-blue-500"
+                                                    />
+                                                    <span className="text-xs text-gray-600">
+                                                        I agree to the{' '}
+                                                        <a href="/terms" className="text-blue-600 hover:underline">
+                                                            Terms of Service
+                                                        </a>{' '}
+                                                        and{' '}
+                                                        <a href="/privacy" className="text-blue-600 hover:underline">
+                                                            Privacy Policy
+                                                        </a>
+                                                    </span>
+                                                </label>
+                                                <label className="flex items-start gap-2">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={marketingOptIn}
+                                                        onChange={(e) => setMarketingOptIn(e.target.checked)}
+                                                        className="mt-0.5 rounded border-blue-300 text-blue-500 focus:ring-blue-500"
+                                                    />
+                                                    <span className="text-xs text-gray-600">
+                                                        Send me product updates and tips
+                                                    </span>
+                                                </label>
+                                            </div>
+
+                                            <button
+                                                onClick={handleStep1Submit}
+                                                disabled={loading}
+                                                className="group w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-sky-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:from-blue-700 hover:to-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105"
+                                            >
+                                                {loading ? (
+                                                    <>
+                                                        <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                                                        Processing...
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        {requireCard ? 'Start Free Trial' : 'Start Free Trial'}
+                                                        <span className="transition-transform group-hover:translate-x-1">
+                                                            🚀
+                                                        </span>
+                                                    </>
+                                                )}
+                                            </button>
+                                        </>
+                                    ) : (
+                                        <>
+                                            {/* Step 2: Payment Information */}
+                                            {/* Show selected plan summary */}
+                                            <div className="rounded-lg bg-blue-50 border border-blue-200 p-4">
+                                                <div className="flex items-center justify-between">
+                                                    <div>
+                                                        <div className="font-medium text-gray-900">
+                                                            {selected?.name} Plan
+                                                        </div>
+                                                        <div className="text-sm text-gray-600">
+                                                            {formatMessages(selected?.includedMessages ?? null)} emails/month
+                                                        </div>
+                                                    </div>
+                                                    <div className="text-right">
+                                                        <div className="text-xl font-bold text-blue-600">
+                                                            {formatMoney(selected?.monthlyPrice ?? null)}/mo
+                                                        </div>
+                                                        <div className="text-xs text-gray-500">after 30-day trial</div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Account summary */}
+                                            <div className="rounded-lg bg-gray-50 p-4 space-y-2">
+                                                <h3 className="font-medium text-gray-900 mb-2">Account Information</h3>
+                                                <div className="text-sm text-gray-600 space-y-1">
+                                                    <div><span className="font-medium">Name:</span> {formData?.fullName}</div>
+                                                    <div><span className="font-medium">Company:</span> {formData?.company}</div>
+                                                    <div><span className="font-medium">Email:</span> {formData?.email}</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Stripe Payment */}
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                                    <CreditCardIcon className="inline h-4 w-4 mr-1" />
+                                                    Payment Method
+                                                </label>
+                                                {stripeSetupError && (
+                                                    <div className="mb-2 text-sm text-red-600">{stripeSetupError}</div>
+                                                )}
+                                                {stripeLoading && (
+                                                    <div className="animate-pulse">
+                                                        <div className="h-20 bg-blue-100 rounded-xl" />
+                                                    </div>
+                                                )}
+                                                {!stripeLoading && stripePromise && stripeClientSecret && (
+                                                    <Elements
+                                                        stripe={stripePromise}
+                                                        options={{ clientSecret: stripeClientSecret, appearance: { theme: 'stripe' } }}
+                                                    >
+                                                        <StripePayment
+                                                            ref={stripeConfirmRef}
+                                                            note="Your card will be saved securely and charged after your 30-day free trial"
+                                                        />
+                                                    </Elements>
+                                                )}
+                                            </div>
+
+                                            <div className="flex gap-3">
+                                                <button
+                                                    onClick={() => {
+                                                        setCurrentStep('info');
+                                                        setError(null);
+                                                    }}
+                                                    disabled={loading}
+                                                    className="inline-flex items-center justify-center gap-2 rounded-xl border-2 border-gray-300 bg-white px-4 py-3 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                                >
+                                                    <ArrowLeftIcon className="h-4 w-4" />
+                                                    Back
+                                                </button>
+                                                <button
+                                                    onClick={handleStep2Submit}
+                                                    disabled={loading || !stripeClientSecret || !!stripeSetupError}
+                                                    className="group flex-1 inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-sky-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:from-blue-700 hover:to-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105"
+                                                >
+                                                    {loading ? (
+                                                        <>
+                                                            <ArrowPathIcon className="h-5 w-5 animate-spin" />
+                                                            Creating Account...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            Complete Registration
+                                                            <CheckCircleIcon className="h-5 w-5 transition-transform group-hover:scale-110" />
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </>
                                     )}
-
-                                    {/* Agreements */}
-                                    <div className="space-y-2">
-                                        <label className="flex items-start gap-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={agree}
-                                                onChange={(e) => setAgree(e.target.checked)}
-                                                className="mt-0.5 rounded border-blue-300 text-blue-500 focus:ring-blue-500"
-                                            />
-                                            <span className="text-xs text-gray-600">
-                                                I agree to the{' '}
-                                                <a href="/terms" className="text-blue-600 hover:underline">
-                                                    Terms of Service
-                                                </a>{' '}
-                                                and{' '}
-                                                <a href="/privacy" className="text-blue-600 hover:underline">
-                                                    Privacy Policy
-                                                </a>
-                                            </span>
-                                        </label>
-                                        <label className="flex items-start gap-2">
-                                            <input
-                                                type="checkbox"
-                                                checked={marketingOptIn}
-                                                onChange={(e) => setMarketingOptIn(e.target.checked)}
-                                                className="mt-0.5 rounded border-blue-300 text-blue-500 focus:ring-blue-500"
-                                            />
-                                            <span className="text-xs text-gray-600">
-                                                Send me product updates and tips
-                                            </span>
-                                        </label>
-                                    </div>
-
-                                    <button
-                                        onClick={handleRegistration}
-                                        disabled={loading || (requireCard && (!stripeClientSecret || !!stripeSetupError))}
-                                        className="group w-full inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-sky-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:from-blue-700 hover:to-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105"
-                                    >
-                                        {loading ? (
-                                            <>
-                                                <ArrowPathIcon className="h-5 w-5 animate-spin" />
-                                                Creating Account...
-                                            </>
-                                        ) : (
-                                            <>
-                                                Start Free Trial
-                                                <span className="transition-transform group-hover:translate-x-1">🚀</span>
-                                            </>
-                                        )}
-                                    </button>
 
                                     <p className="text-center text-sm text-gray-600">
                                         Already have an account?{' '}
@@ -888,7 +1040,7 @@ const sendEmail = async () => {
                             <span>🐵</span>
                         </a>
                         <a
-                            href="/docs"
+                            href="https://monkeysmail.com/docs/overview" target="_blank"
                             className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-700/50 backdrop-blur-sm px-6 py-3 text-sm font-medium text-white shadow-lg hover:bg-blue-700/70 transition-all transform hover:scale-105"
                         >
                             View Documentation
@@ -914,30 +1066,29 @@ const sendEmail = async () => {
                         <div>
                             <h4 className="font-semibold text-gray-900 mb-3">Product</h4>
                             <ul className="space-y-2 text-sm">
-                                <li><a href="#features" className="hover:text-blue-600 transition-colors">Features</a></li>
-                                <li><a href="#pricing" className="hover:text-blue-600 transition-colors">Pricing</a></li>
-                                <li><a href="/docs" className="hover:text-blue-600 transition-colors">Documentation</a></li>
-                                <li><a href="/api" className="hover:text-blue-600 transition-colors">API Reference</a></li>
+                                <li><a href="https://monkeysmail.com/features" target="_blank" className="hover:text-blue-600 transition-colors">Features</a></li>
+                                <li><a href="https://monkeysmail.com/pricing" target="_blank"  className="hover:text-blue-600 transition-colors">Pricing</a></li>
+                                <li><a href="https://monkeysmail.com/docs/overview" target="_blank" className="hover:text-blue-600 transition-colors">Documentation</a></li>
+                                <li><a href="https://monkeysmail.com/docs/api/send" target="_blank" className="hover:text-blue-600 transition-colors">API Reference</a></li>
                             </ul>
                         </div>
 
                         <div>
                             <h4 className="font-semibold text-gray-900 mb-3">Company</h4>
                             <ul className="space-y-2 text-sm">
-                                <li><a href="/about" className="hover:text-blue-600 transition-colors">About</a></li>
-                                <li><a href="/blog" className="hover:text-blue-600 transition-colors">Blog</a></li>
-                                <li><a href="/careers" className="hover:text-blue-600 transition-colors">Careers</a></li>
-                                <li><a href="/contact" className="hover:text-blue-600 transition-colors">Contact</a></li>
+                                <li><a href="https://monkeysmail.com/about" target="_blank" className="hover:text-blue-600 transition-colors">About</a></li>
+                                <li><a href="https://monkeysmail.com/blog" target="_blank" className="hover:text-blue-600 transition-colors">Blog</a></li>
+                                <li><a href="https://monkeysmail.com/contact" target="_blank" className="hover:text-blue-600 transition-colors">Contact</a></li>
                             </ul>
                         </div>
 
                         <div>
                             <h4 className="font-semibold text-gray-900 mb-3">Legal</h4>
                             <ul className="space-y-2 text-sm">
-                                <li><a href="/terms" className="hover:text-blue-600 transition-colors">Terms</a></li>
-                                <li><a href="/privacy" className="hover:text-blue-600 transition-colors">Privacy</a></li>
-                                <li><a href="/security" className="hover:text-blue-600 transition-colors">Security</a></li>
-                                <li><a href="/gdpr" className="hover:text-blue-600 transition-colors">GDPR</a></li>
+                                <li><a href="https://monkeysmail.com/terms" target="_blank" className="hover:text-blue-600 transition-colors">Terms</a></li>
+                                <li><a href="https://monkeysmail.com/privacy" target="_blank" className="hover:text-blue-600 transition-colors">Privacy</a></li>
+                                <li><a href="https://monkeysmail.com/security" target="_blank" className="hover:text-blue-600 transition-colors">Security</a></li>
+                                <li><a href="https://monkeysmail.com/gdpr" target="_blank" className="hover:text-blue-600 transition-colors">GDPR</a></li>
                             </ul>
                         </div>
                     </div>
@@ -957,7 +1108,6 @@ const sendEmail = async () => {
                     </div>
                 </div>
             </footer>
-
 
             {/* Custom CSS for animations */}
             <style jsx>{`
