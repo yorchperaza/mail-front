@@ -908,10 +908,10 @@ export default function RegisterPage() {
                                                 </>
                                             ) : (
                                                 <>
-                                                    {requireCard ? 'Continue to Payment' : 'Start Free Trial'}
+                                                    {requireCard ? 'Start Free Trial' : 'Start Free Trial'}
                                                     <span className="transition-transform group-hover:translate-x-1">
-                                                        {requireCard ? '→' : '🚀'}
-                                                    </span>
+                                                            🚀
+                                                        </span>
                                                 </>
                                             )}
                                         </button>
