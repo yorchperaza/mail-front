@@ -718,11 +718,11 @@ export default function MonkeysMailLanding() {
                                                     />
                                                     <span className="text-xs text-gray-600">
                                                         I agree to the{' '}
-                                                        <a href="/terms" className="text-blue-600 hover:underline">
+                                                        <a href="https://monkeysmail.com/terms" target="_blank" className="text-blue-600 hover:underline">
                                                             Terms of Service
                                                         </a>{' '}
                                                         and{' '}
-                                                        <a href="/privacy" className="text-blue-600 hover:underline">
+                                                        <a href="https://monkeysmail.com/privacy" target="_blank" className="text-blue-600 hover:underline">
                                                             Privacy Policy
                                                         </a>
                                                     </span>
