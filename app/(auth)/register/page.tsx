@@ -874,13 +874,13 @@ export default function RegisterPage() {
                                                 />
                                                 <span className="text-xs text-gray-600">
                                                     I agree to the{' '}
-                                                    <a href="/legal/terms" className="text-blue-600 hover:underline">
-                                                        Terms of Service
-                                                    </a>{' '}
+                                                    <a href="https://monkeysmail.com/terms" target="_blank" className="text-blue-600 hover:underline">
+                                                            Terms of Service
+                                                        </a>{' '}
                                                     and{' '}
-                                                    <a href="/legal/privacy" className="text-blue-600 hover:underline">
-                                                        Privacy Policy
-                                                    </a>
+                                                    <a href="https://monkeysmail.com/privacy" target="_blank" className="text-blue-600 hover:underline">
+                                                            Privacy Policy
+                                                        </a>
                                                 </span>
                                             </label>
                                             <label className="flex items-start gap-2">
