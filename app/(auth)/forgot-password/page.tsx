@@ -282,7 +282,7 @@ function ForgotPasswordContent() {
                                                     type="email"
                                                     value={email}
                                                     onChange={(e) => setEmail(e.target.value)}
-                                                    className={`w-full rounded-lg border shadow-sm focus:border-blue-500 focus:ring-blue-500 ${
+                                                    className={`w-full rounded-lg border shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2 ${
                                                         fieldError ? "border-red-300" : "border-blue-200"
                                                     }`}
                                                     placeholder="you@company.com"

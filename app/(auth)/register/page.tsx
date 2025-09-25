@@ -741,7 +741,7 @@ export default function RegisterPage() {
                                                     id="fullName"
                                                     value={fullName}
                                                     onChange={(e) => setFullName(e.target.value)}
-                                                    className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                    className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2"
                                                     placeholder="John Doe"
                                                     autoComplete="name"
                                                 />
@@ -755,7 +755,7 @@ export default function RegisterPage() {
                                                     id="company"
                                                     value={company}
                                                     onChange={(e) => setCompany(e.target.value)}
-                                                    className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                    className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2"
                                                     placeholder="Acme Inc."
                                                     autoComplete="organization"
                                                 />
@@ -773,7 +773,7 @@ export default function RegisterPage() {
                                                         displayValue={(c: CountryOption | null) => c?.name ?? ""}
                                                         onChange={(e) => setQuery(e.target.value)}
                                                         placeholder="Select country..."
-                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10"
+                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10 px-4 py-2"
                                                     />
                                                     <Combobox.Button className="absolute inset-y-0 right-3 text-gray-400">
                                                         ▼
@@ -818,7 +818,7 @@ export default function RegisterPage() {
                                                 type="email"
                                                 value={email}
                                                 onChange={(e) => setEmail(e.target.value)}
-                                                className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2"
                                                 placeholder="john@company.com"
                                                 autoComplete="email"
                                             />
@@ -834,7 +834,7 @@ export default function RegisterPage() {
                                                     type={showPass ? "text" : "password"}
                                                     value={password}
                                                     onChange={(e) => setPassword(e.target.value)}
-                                                    className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-12"
+                                                    className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-12 px-4 py-2"
                                                     placeholder="Min. 10 characters"
                                                     autoComplete="new-password"
                                                 />

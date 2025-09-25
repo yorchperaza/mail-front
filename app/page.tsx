@@ -640,7 +640,7 @@ export default function MonkeysMailLanding() {
                                                         type="text"
                                                         value={fullName}
                                                         onChange={(e) => setFullName(e.target.value)}
-                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2"
                                                         placeholder="John Doe"
                                                     />
                                                 </div>
@@ -652,7 +652,7 @@ export default function MonkeysMailLanding() {
                                                         type="text"
                                                         value={company}
                                                         onChange={(e) => setCompany(e.target.value)}
-                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2"
                                                         placeholder="Acme Inc."
                                                     />
                                                 </div>
@@ -666,7 +666,7 @@ export default function MonkeysMailLanding() {
                                                     type="email"
                                                     value={email}
                                                     onChange={(e) => setEmail(e.target.value)}
-                                                    className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                                                    className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 px-4 py-2"
                                                     placeholder="john@company.com"
                                                 />
                                             </div>
@@ -680,7 +680,7 @@ export default function MonkeysMailLanding() {
                                                         type={showPassword ? 'text' : 'password'}
                                                         value={password}
                                                         onChange={(e) => setPassword(e.target.value)}
-                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10"
+                                                        className="w-full rounded-lg border-blue-200 shadow-sm focus:border-blue-500 focus:ring-blue-500 pr-10 px-4 py-2"
                                                         placeholder="Min. 10 characters"
                                                     />
                                                     <button

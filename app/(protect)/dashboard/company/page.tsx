@@ -101,7 +101,7 @@ export default function CompaniesListPage() {
                 <div className="max-w-md text-center space-y-4">
                     <p className="text-red-600">{error}</p>
                     <button
-                        onClick={() => router.back()}
+                        onClick={() => router.push('/dashboard')}
                         className="inline-flex items-center space-x-1 px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
                     >
                         <ArrowLeftIcon className="h-4 w-4" /><span>Back</span>
@@ -117,7 +117,7 @@ export default function CompaniesListPage() {
             <div className="flex items-center justify-between">
                 <div className="flex items-center space-x-3">
                     <button
-                        onClick={() => router.back()}
+                        onClick={() => router.push('/dashboard')}
                         className="inline-flex items-center justify-center h-9 w-9 rounded-full hover:bg-gray-100"
                     >
                         <ArrowLeftIcon className="h-5 w-5 text-gray-600" />

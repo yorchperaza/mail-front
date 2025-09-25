@@ -361,7 +361,7 @@ export default function CreateCompanyPage() {
 
             const json = await res.json();
             if (json?.hash) router.push(`/dashboard/company/${json.hash}`);
-            else router.push('/dashboard/company');
+            else router.push('/dashboard');
         } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
             setApiError({ message });
@@ -377,7 +377,7 @@ export default function CreateCompanyPage() {
             {/* Header */}
             <div className="flex items-center gap-3">
                 <button
-                    onClick={() => router.push('/dashboard/company')}
+                    onClick={() => router.push('/dashboard')}
                     className="inline-flex items-center justify-center h-9 w-9 rounded-full hover:bg-gray-100"
                     aria-label="Back"
                 >
@@ -385,7 +385,7 @@ export default function CreateCompanyPage() {
                 </button>
                 <h1 className="text-3xl font-semibold">Create Company</h1>
                 <div className="ml-auto text-sm">
-                    <Link href="/dashboard/company" className="text-blue-600 hover:text-blue-700">
+                    <Link href="/dashboard" className="text-blue-600 hover:text-blue-700">
                         All companies →
                     </Link>
                 </div>
@@ -629,7 +629,7 @@ export default function CreateCompanyPage() {
                     {/* Actions */}
                     <section className="bg-white rounded-xl border border-neutral-200 shadow-sm p-6">
                         <form onSubmit={onSubmit} className="flex justify-end gap-3">
-                            <Link href="/dashboard/company" className="inline-flex items-center px-4 py-2 rounded-lg border hover:bg-gray-50">
+                            <Link href="/dashboard" className="inline-flex items-center px-4 py-2 rounded-lg border hover:bg-gray-50">
                                 Cancel
                             </Link>
                             <button
