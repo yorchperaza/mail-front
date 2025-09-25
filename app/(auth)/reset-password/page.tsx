@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 import { EyeIcon, EyeSlashIcon } from "@heroicons/react/24/outline";
@@ -23,8 +23,11 @@ function ResetPasswordContent() {
     const router = useRouter();
     const params = useSearchParams();
 
-    const email = useMemo(() => params?.get("email") ?? "", [params]);
     const token = useMemo(() => params?.get("token") ?? "", [params]);
+
+    const [emailMask, setEmailMask] = useState<string>("");
+    const [emailFull, setEmailFull] = useState<string>("");
+    const [loadingInfo, setLoadingInfo] = useState(true);
 
     const [password, setPassword] = useState("");
     const [confirm, setConfirm] = useState("");
@@ -36,9 +39,45 @@ function ResetPasswordContent() {
     const [error, setError] = useState<string | null>(null);
     const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+    useEffect(() => {
+        let ignore = false;
+        async function fetchInfo() {
+            if (!token) {
+                setError("Missing reset token.");
+                setLoadingInfo(false);
+                return;
+            }
+            try {
+                const res = await fetch(
+                    `${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/password/token-info?token=${encodeURIComponent(
+                        token
+                    )}`
+                );
+                const data = await res.json().catch(() => ({}));
+                if (!ignore) {
+                    if (res.ok) {
+                        setEmailMask(data.emailMask || data.email || "");
+                        setEmailFull(data.email || "");
+                    } else {
+                        setError(data.message || "Invalid or expired reset link.");
+                    }
+                }
+            } catch (e) {
+                if (!ignore) {
+                    setError(e instanceof Error ? e.message : "Unexpected error.");
+                }
+            } finally {
+                if (!ignore) setLoadingInfo(false);
+            }
+        }
+        fetchInfo();
+        return () => {
+            ignore = true;
+        };
+    }, [token]);
+
     function validate(): boolean {
         const errs: Record<string, string> = {};
-        if (!email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) errs.email = "Invalid email.";
         if (!token) errs.token = "Missing token.";
         if (!password || password.length < 8)
             errs.password = "Password must be at least 8 characters.";
@@ -59,7 +98,7 @@ function ResetPasswordContent() {
                 {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ email, token, password }),
+                    body: JSON.stringify({ token, password }), // <-- token-only
                 }
             );
 
@@ -69,7 +108,8 @@ function ResetPasswordContent() {
                 setTimeout(() => router.push("/login"), 2000);
             } else {
                 setError(
-                    (data.message as string) || "Invalid or expired reset link. Try again."
+                    (data.message as string) ||
+                    "Invalid or expired reset link. Try again."
                 );
             }
         } catch (err) {
@@ -146,9 +186,7 @@ function ResetPasswordContent() {
                                 <h2 className="text-xl font-semibold text-white">
                                     Create your new password
                                 </h2>
-                                <p className="text-blue-100 text-sm mt-1">
-                                    Tokenized secure reset
-                                </p>
+                                <p className="text-blue-100 text-sm mt-1">Tokenized secure reset</p>
                             </div>
 
                             <div className="p-6 space-y-4">
@@ -172,10 +210,7 @@ function ResetPasswordContent() {
                                                 <p className="font-medium">Password updated!</p>
                                                 <p className="mt-1">
                                                     You can now{" "}
-                                                    <a
-                                                        className="text-green-700 underline"
-                                                        href="/login"
-                                                    >
+                                                    <a className="text-green-700 underline" href="/login">
                                                         sign in
                                                     </a>{" "}
                                                     with your new password.
@@ -207,29 +242,24 @@ function ResetPasswordContent() {
                                             </div>
                                         )}
 
-                                        <form onSubmit={handleSubmit} className="space-y-4">
-                                            {/* email (read-only from query) */}
-                                            <div>
-                                                <label
-                                                    htmlFor="email"
-                                                    className="block text-sm font-medium text-gray-700 mb-1"
-                                                >
-                                                    Email
-                                                </label>
-                                                <input
-                                                    id="email"
-                                                    type="email"
-                                                    value={email}
-                                                    readOnly
-                                                    className="w-full rounded-lg border border-blue-200 bg-gray-50 text-gray-700 shadow-sm"
-                                                />
-                                                {fieldErrors.email && (
-                                                    <p className="mt-1 text-xs text-red-600">
-                                                        {fieldErrors.email}
-                                                    </p>
-                                                )}
-                                            </div>
+                                        {/* account email from token */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                                Account
+                                            </label>
+                                            <input
+                                                type="text"
+                                                value={
+                                                    loadingInfo
+                                                        ? "Checking token…"
+                                                        : (emailMask || emailFull || "")
+                                                }
+                                                readOnly
+                                                className="w-full rounded-lg border border-blue-200 bg-gray-50 text-gray-700 shadow-sm"
+                                            />
+                                        </div>
 
+                                        <form onSubmit={handleSubmit} className="space-y-4">
                                             {/* password */}
                                             <div>
                                                 <label
@@ -318,27 +348,21 @@ function ResetPasswordContent() {
                                                 )}
                                             </div>
 
-                                            {/* hidden token field validation message */}
+                                            {/* token error, if any */}
                                             {fieldErrors.token && (
                                                 <p className="text-xs text-red-600">{fieldErrors.token}</p>
                                             )}
 
                                             <button
                                                 type="submit"
-                                                disabled={loading}
+                                                disabled={loading || loadingInfo}
                                                 className="w-full rounded-xl bg-gradient-to-r from-blue-600 to-sky-600 px-4 py-3 text-sm font-medium text-white shadow-lg hover:from-blue-700 hover:to-sky-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105"
                                             >
                                                 {loading ? "Updating..." : "Set new password"}
                                             </button>
 
                                             <p className="mt-4 text-center text-sm text-gray-600">
-                                                Changed your mind?{" "}
-                                                <a
-                                                    href="/login"
-                                                    className="font-medium text-blue-600 hover:text-blue-700"
-                                                >
-                                                    Back to sign in
-                                                </a>
+                                                Not you? Open the reset link from the correct email inbox.
                                             </p>
                                         </form>
                                     </>
@@ -350,28 +374,28 @@ function ResetPasswordContent() {
             </div>
 
             <style jsx>{`
-        @keyframes blob {
-          0%,
-          100% {
-            transform: translate(0, 0) scale(1);
-          }
-          33% {
-            transform: translate(30px, -50px) scale(1.1);
-          }
-          66% {
-            transform: translate(-20px, 20px) scale(0.9);
-          }
-        }
-        .animate-blob {
-          animation: blob 7s infinite;
-        }
-        .animation-delay-2000 {
-          animation-delay: 2s;
-        }
-        .animation-delay-4000 {
-          animation-delay: 4s;
-        }
-      `}</style>
+                @keyframes blob {
+                    0%,
+                    100% {
+                        transform: translate(0, 0) scale(1);
+                    }
+                    33% {
+                        transform: translate(30px, -50px) scale(1.1);
+                    }
+                    66% {
+                        transform: translate(-20px, 20px) scale(0.9);
+                    }
+                }
+                .animate-blob {
+                    animation: blob 7s infinite;
+                }
+                .animation-delay-2000 {
+                    animation-delay: 2s;
+                }
+                .animation-delay-4000 {
+                    animation-delay: 4s;
+                }
+            `}</style>
         </div>
     );
 }
