@@ -1,6 +1,5 @@
 "use client";
 
-import type { CSSProperties } from "react";
 import React, {
     Fragment,
     useEffect,
@@ -142,7 +141,6 @@ function toFeatureBullets(features: PlanDetail["features"]): string[] {
         if (q.emailValidationsIncluded != null) bullets.push(`${q.emailValidationsIncluded} validations included`);
         if (q.sendingDomains) {
             const inc = q.sendingDomains.included ?? null;
-            const mx = q.sendingDomains.max ?? null;
             if (inc != null) bullets.push(`${inc} sending domains included`);
         }
     }
