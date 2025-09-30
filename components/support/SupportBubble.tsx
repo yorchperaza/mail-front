@@ -55,9 +55,17 @@ export default function SupportBubble({ tokenStorageKey = 'access_token', backen
 
     async function submit(e: React.FormEvent) {
         e.preventDefault();
-        setError(null); setOk(false);
-        if (!subject.trim() || !description.trim()) { setError('Please provide subject and description.'); return; }
-        if (!backend) { setError('Missing backend URL.'); return; }
+        setError(null);
+        setOk(false);
+
+        if (!subject.trim() || !description.trim()) {
+            setError('Please provide subject and description.');
+            return;
+        }
+        if (!backend) {
+            setError('Missing backend URL.');
+            return;
+        }
 
         const fd = new FormData();
         fd.append('subject', subject.trim());
@@ -68,16 +76,35 @@ export default function SupportBubble({ tokenStorageKey = 'access_token', backen
         try {
             const res = await fetch(`${backend}/support`, {
                 method: 'POST',
-                headers: { ...(tokenRef.current ? { Authorization: `Bearer ${tokenRef.current}` } : {}) },
+                headers: {
+                    ...(tokenRef.current ? { Authorization: `Bearer ${tokenRef.current}` } : {}),
+                },
                 body: fd,
                 credentials: 'include',
             });
-            if (res.status === 202) { setOk(true); setSubject(''); setDescription(''); setFiles([]); return; }
+
+            if (res.status === 202) {
+                // reset state
+                setOk(true);
+                setSubject('');
+                setDescription('');
+                setFiles([]);
+
+                // ✅ close modal after short delay
+                setTimeout(() => setOpen(false), 1500);
+                return;
+            }
+
             const payload = await res.json().catch(() => ({}));
-            setError((payload && typeof payload.message === 'string' && payload.message) || `Request failed (${res.status})`);
+            setError(
+                (payload && typeof payload.message === 'string' && payload.message) ||
+                `Request failed (${res.status})`
+            );
         } catch (err) {
             setError(err instanceof Error ? err.message : 'Failed to send support request.');
-        } finally { setSending(false); }
+        } finally {
+            setSending(false);
+        }
     }
 
     return (
