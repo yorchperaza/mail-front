@@ -76,7 +76,7 @@ export default function DashboardPageLayout({
             <SessionGuard>
                 {children}
             </SessionGuard>
-            <SupportBubble />
+            <SupportBubble tokenStorageKey="jwt" />
         </DashboardLayout>
     );
 }

@@ -148,10 +148,6 @@ function LoginContent() {
                 {/* Form side */}
                 <main className="relative flex items-center justify-center p-6 sm:p-10">
                     <div className="w-full max-w-sm sm:max-w-md">
-                        {/* Floating badge */}
-                        <div className="absolute -right-4 -top-4 animate-float rounded-2xl bg-gradient-to-r from-green-400 to-green-600 px-4 py-2 text-sm font-bold text-white shadow-xl z-10">
-                            ✨ Secure Login
-                        </div>
 
                         <div className="rounded-3xl bg-white/90 backdrop-blur-xl shadow-2xl ring-1 ring-blue-200/50 overflow-hidden">
                             <div className="bg-gradient-to-r from-blue-600 to-sky-600 px-6 py-4">
