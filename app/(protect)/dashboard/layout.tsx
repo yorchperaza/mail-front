@@ -5,7 +5,7 @@ import { ReactNode, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import SessionKeeper from "@/components/session/SessionKeeper";
 import SessionGuard from "@/components/session/SessionGuard";
-
+import SupportBubble from '@/components/support/SupportBubble';
 
 interface User {
     media: {
@@ -76,6 +76,7 @@ export default function DashboardPageLayout({
             <SessionGuard>
                 {children}
             </SessionGuard>
+            <SupportBubble />
         </DashboardLayout>
     );
 }
